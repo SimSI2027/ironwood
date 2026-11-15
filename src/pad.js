@@ -1,8 +1,8 @@
 // 8. Recoil pad: black ribbed rubber pad, spacer plate, 2 mounting screws. Built in a frame
 // aligned to the butt line (local +X points into the stock, local +Y toward the heel).
-import {THREE, mesh, group, rpoly, extrudeXY, rbox, screwX, merge, at} from './lib/geo.js';
+import {THREE, mesh, group, extrudeYZ, rbox, screwX, merge, at} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
-import {HEEL, TOE, widthAt} from './stock.js';
+import {HEEL, TOE, BUTT_W, SE, ovalShape} from './stock.js';
 
 export function buildPad() {
   const A = new Asm('pad', 'Recoil pad', {offset: [-21, -1, 0], delay: 0});
@@ -13,30 +13,21 @@ export function buildPad() {
   frame.rotation.z = Math.atan2(TOE[0] - HEEL[0], HEEL[1] - TOE[1]); // tilt of the butt line
   A.group.add(frame);
   const hl = len / 2;
-  const W = 3.3 * widthAt(-42) + 0.05;
+  const W = BUTT_W; // the butt outline is an oval, half-height hl, half-width W
+  const across = (y, a, w) => w * Math.max(0, 1 - Math.abs(y / a) ** SE) ** (1 / SE); // half-width at y
 
-  // --- spacer plate
-  const spacer = mesh(rbox(0.26, len + 0.04, W, 0.08), M.polymer, -0.13, 0, 0);
+  // --- spacer plate: the butt outline, 2.6 mm thick
+  const spacer = mesh(extrudeYZ(ovalShape(hl, W), 0.26, 0.04, 72).translate(-0.26, 0, 0), M.polymer);
   A.add(spacer, 'spacer plate', {parent: frame, ex: [3.2, 0, 0], delay: 0.3});
 
-  // --- pad body: slightly convex back, rounded heel and toe
-  const ps = rpoly(
-    [
-      [-0.26, -hl, 0.15],
-      [-2.0, -hl - 0.12, 0.9],
-      [-2.6, -hl + 3.0, 0.4],
-      [-2.66, hl - 3.0, 0.4],
-      [-2.0, hl + 0.1, 0.9],
-      [-0.26, hl, 0.15],
-    ],
-    0.2,
-  );
-  const body = group(0, 0, 0, mesh(extrudeXY(ps, W, 0.42, 32, {bevelSegments: 4}), M.rubber));
-  // back face ribs
+  // --- pad body: the same outline, 2.4 cm deep, every back edge (heel and toe too) rounded 5 mm
+  const BEV = 0.5;
+  const body = group(0, 0, 0, mesh(extrudeYZ(ovalShape(hl, W), 2.4, BEV, 72).translate(-2.66, 0, 0), M.rubber));
+  // back face ribs, each as wide as the flat back at its height
   const ribs = [];
-  for (let k = -5; k <= 5; k++) ribs.push(at(rbox(0.16, 0.42, W - 1.0, 0.07), -2.7, k * 1.08, 0));
-  // side ribs, both sides
-  for (let k = -4; k <= 4; k++) for (const s of [1, -1]) ribs.push(at(rbox(1.45, 0.3, 0.1, 0.04), -1.3, k * 1.15, s * (W / 2 - 0.02)));
+  for (let k = -5; k <= 5; k++) ribs.push(at(rbox(0.16, 0.42, 1.8 * across(k * 1.08, hl - BEV, W - BEV), 0.07), -2.7, k * 1.08, 0));
+  // side ribs, both sides, on the outline
+  for (let k = -4; k <= 4; k++) for (const s of [1, -1]) ribs.push(at(rbox(1.3, 0.3, 0.1, 0.04), -1.46, k * 1.15, s * (across(k * 1.15, hl, W) - 0.02)));
   body.add(mesh(merge(ribs), M.rubber));
   // screw access slits on the back
   for (const y of [4.6, -4.6]) body.add(mesh(rbox(0.05, 0.9, 0.12, 0.02), M.polymer, -2.73, y, 0));

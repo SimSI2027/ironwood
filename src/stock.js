@@ -1,6 +1,6 @@
 // 7. Stock: walnut buttstock with a pistol-grip curve, checkered grip panels both sides, grip cap,
 // sling swivel stud, and the long stock bolt with flat and lock washers inside.
-import {THREE, rcyl, mesh, group, extrudeXY, smooth, screwX, latheX, rpoly, rodX} from './lib/geo.js';
+import {THREE, rcyl, mesh, group, screwX, latheX, rpoly, rodX, mergeVertices} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
 import {walnut, diamondNormal} from './lib/materials.js';
 
@@ -13,36 +13,153 @@ export const widthAt = (x) => {
   return 0.93 + 0.37 * t * t * (3 - 2 * t);
 };
 
-function stockShape() {
+// --- lofted buttstock. Each station is the segment from the comb point T(u) to the belly point
+// B(u) (u 0 at the receiver joint, 1 at the butt) swept into an oval (superellipse) ring of
+// half-width widthAt. At the joint T and B are the receiver's rear top and bottom, so the heights match.
+const JOINT = [-20.5, 0.42, -5.0]; // receiver rear: x, top (wall line -0.2 + crown 0.62), bottom
+export const SE = 2.4; // cross-section exponent: an oval, a little fuller than an ellipse
+const FIL = 0.3; // rounded edge (heel, toe and sides) where the wood meets the pad
+// belly: the pistol-grip curve behind the trigger guard, then one smooth line to the toe (no notch)
+const BP = new THREE.SplineCurve(
+  [[-20.5, -5.0], [-21.3, -6.0], [-22.6, -8.4], [-24.4, -11.4], [-26.2, -13.2], [-28.4, -14.0], [-31.5, -14.6], [-35.5, -15.8], [-39.5, -17.3], [-42.75, -18.45]].map(([x, y]) => new THREE.Vector2(x, y)),
+).getSpacedPoints(600);
+export function bellyY(x) {
+  for (let i = 1; i < BP.length; i++) if (BP[i].x <= x) return BP[i].y + ((BP[i - 1].y - BP[i].y) * (x - BP[i].x)) / (BP[i - 1].x - BP[i].x || 1);
+  return BP[BP.length - 1].y;
+}
+/** Station u: comb point (xt, yt), belly point (xb, yb), half-width w. The comb is one straight line. */
+function station(u) {
+  const xt = JOINT[0] + u * (HEEL[0] - JOINT[0]);
+  const yt = JOINT[1] + u * (HEEL[1] - JOINT[1]);
+  const xb = JOINT[0] + u * (TOE[0] - JOINT[0]);
+  return {xt, yt, xb, yb: bellyY(xb), w: (DEPTH / 2) * widthAt((xt + xb) / 2)};
+}
+/** Unit oval point at angle th: [along comb-belly (1 = comb), across (z)]. */
+export const ovalPt = (th) => {
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  return [Math.sign(c) * Math.abs(c) ** (2 / SE), Math.sign(s) * Math.abs(s) ** (2 / SE)];
+};
+/** Half-width of the butt outline (the pad follows it). */
+export const BUTT_W = station(1).w;
+/** Oval outline in (z, y), half-height a, half-width w, for extrudeYZ. */
+export function ovalShape(a, w, n = 72) {
   const s = new THREE.Shape();
-  s.moveTo(-20.5, 0.38);
-  s.lineTo(-23.0, 0.3);
-  s.lineTo(-41.1, -4.3);
-  s.quadraticCurveTo(-41.65, -4.42, -41.68, -4.9);
-  s.lineTo(-42.72, -17.95);
-  s.quadraticCurveTo(-42.78, -18.5, -42.2, -18.42);
-  s.quadraticCurveTo(-36.2, -16.1, -32.2, -12.6);
-  s.quadraticCurveTo(-31.0, -11.6, -30.3, -12.7);
-  s.lineTo(-30.0, -13.6);
-  s.quadraticCurveTo(-29.8, -13.9, -29.4, -13.85);
-  s.lineTo(-26.3, -13.2);
-  s.quadraticCurveTo(-25.6, -13.05, -25.2, -12.5);
-  s.quadraticCurveTo(-22.9, -9.0, -21.7, -7.3);
-  s.quadraticCurveTo(-21.0, -6.2, -20.5, -6.0);
+  for (let j = 0; j < n; j++) {
+    const [sy, sz] = ovalPt((j / n) * Math.PI * 2);
+    j ? s.lineTo(w * sz, a * sy) : s.moveTo(w * sz, a * sy);
+  }
   s.closePath();
   return s;
+}
+
+function stockGeo() {
+  const NR = 64;
+  const NM = 96;
+  const NF = 7;
+  const uf = 1 - 0.4 / 21.7; // the last 4 mm carry the rounded edge
+  const us = [];
+  for (let i = 0; i <= NM; i++) us.push([(uf * i) / NM, 0]);
+  for (let k = 1; k <= NF; k++) us.push([uf + ((1 - uf) * k) / NF, FIL * (1 - Math.sqrt(1 - (k / NF) ** 2))]);
+  const pos = [];
+  const idx = [];
+  const rings = [];
+  for (const [u, d] of us) {
+    const r = station(u);
+    const m = [(r.xt + r.xb) / 2, (r.yt + r.yb) / 2];
+    const e = [(r.xt - r.xb) / 2, (r.yt - r.yb) / 2];
+    const ka = 1 - d / Math.hypot(e[0], e[1]);
+    const ring = [];
+    for (let j = 0; j < NR; j++) {
+      const [sy, sz] = ovalPt((j / NR) * Math.PI * 2);
+      ring.push([m[0] + e[0] * ka * sy, m[1] + e[1] * ka * sy, (r.w - d) * sz]);
+    }
+    rings.push({m, ring});
+  }
+  rings.forEach(({ring}) => ring.forEach((p) => pos.push(...p)));
+  for (let i = 0; i < rings.length - 1; i++)
+    for (let j = 0; j < NR; j++) {
+      const a = i * NR + j;
+      const b = (i + 1) * NR + j;
+      const c = i * NR + ((j + 1) % NR);
+      const dd = (i + 1) * NR + ((j + 1) % NR);
+      idx.push(a, b, c, b, dd, c);
+    }
+  // flat end caps with their own vertices (the joint face is hidden against the receiver)
+  for (const [k, front] of [[0, true], [rings.length - 1, false]]) {
+    const {m, ring} = rings[k];
+    const c0 = pos.length / 3;
+    pos.push(m[0], m[1], 0);
+    ring.forEach((p) => pos.push(...p));
+    for (let j = 0; j < NR; j++) {
+      const p = c0 + 1 + j;
+      const q = c0 + 1 + ((j + 1) % NR);
+      front ? idx.push(c0, p, q) : idx.push(c0, q, p);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Stock surface |z| at side-view point (x, y) (away from the butt edge): solves for the station. */
+function surfZ(x, y) {
+  const du = (HEEL[0] + TOE[0]) / 2 - JOINT[0];
+  let u = (x - JOINT[0]) / du;
+  let r;
+  let t;
+  for (let it = 0; it < 8; it++) {
+    r = station(u);
+    t = (y - r.yb) / (r.yt - r.yb);
+    u += (x - (r.xb + t * (r.xt - r.xb))) / du;
+  }
+  return r.w * Math.max(0, 1 - Math.abs(2 * t - 1) ** SE) ** (1 / SE);
+}
+/** Split every triangle of a non-indexed geometry into 4 (positions and uvs). */
+function subdivide(g) {
+  const P = g.attributes.position.array;
+  const U = g.attributes.uv.array;
+  const p = [];
+  const uv = [];
+  for (let f = 0; f < P.length / 9; f++) {
+    const v = [0, 1, 2].map((k) => [P[f * 9 + k * 3], P[f * 9 + k * 3 + 1], P[f * 9 + k * 3 + 2], U[f * 6 + k * 2], U[f * 6 + k * 2 + 1]]);
+    const mid = (a, b) => a.map((x, i) => (x + b[i]) / 2);
+    const [a, b, c] = v;
+    const ab = mid(a, b);
+    const bc = mid(b, c);
+    const ca = mid(c, a);
+    for (const tri of [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]) for (const q of tri) p.push(q[0], q[1], q[2]), uv.push(q[3], q[4]);
+  }
+  const o = new THREE.BufferGeometry();
+  o.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  o.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  return o;
+}
+/** Checkered panel draped on the curved side of the grip, offset 0.15 mm, one side (+z or -z). */
+function panelGeo(shape, side) {
+  let g = new THREE.ShapeGeometry(shape, 24).toNonIndexed();
+  for (let k = 0; k < 3; k++) g = subdivide(g);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setZ(i, side * (surfZ(p.getX(i), p.getY(i)) + 0.015));
+  if (side < 0) {
+    // mirrored: swap two corners of each triangle so the faces still point out
+    for (const {array: A, itemSize: n} of [p, g.attributes.uv])
+      for (let f = 0; f < A.length; f += 3 * n)
+        for (let c = 0; c < n; c++) [A[f + n + c], A[f + 2 * n + c]] = [A[f + 2 * n + c], A[f + n + c]];
+  }
+  g = mergeVertices(g, 1e-4);
+  g.computeVertexNormals();
+  return g;
 }
 
 export function buildStock() {
   const A = new Asm('stock', 'Stock', {offset: [-12, -1, 0], delay: 0.2});
   const M = A.M;
 
-  // --- buttstock: extruded side profile with a deep rounded bevel, widened toward the butt
-  let g = extrudeXY(stockShape(), DEPTH, 0.78, 48, {bevelSegments: 6});
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) * widthAt(p.getX(i)));
-  g = smooth(g, 1e-3);
-  const wood = mesh(g, M.walnut(0.0));
+  // --- buttstock: lofted oval sections, straight comb, pistol grip, smooth belly
+  const wood = mesh(stockGeo(), M.walnut(0.0));
   const stock = group(0, 0, 0, wood);
 
   // --- checkered grip panels: pointed fleur outline, diamond checkering as bump
@@ -68,27 +185,27 @@ export function buildStock() {
     ],
     0.2,
   );
-  const pg = new THREE.ShapeGeometry(panel, 24);
-  const zf = (DEPTH / 2) * widthAt(-24) + 0.012;
-  stock.add(mesh(pg, pm, 0, 0, zf), mesh(pg, pm, 0, 0, -zf));
-  // border line around each panel
+  stock.add(mesh(panelGeo(panel, 1), pm), mesh(panelGeo(panel, -1), pm));
+  // border line around each panel, on the same surface
   const border = new THREE.MeshStandardMaterial({color: 0x1a0d06, roughness: 0.6});
-  const bpts = panel.getPoints(24).map((v) => new THREE.Vector3(v.x, v.y, 0));
-  const bcurve = new THREE.CatmullRomCurve3(bpts, true);
-  const bgeo = new THREE.TubeGeometry(bcurve, 220, 0.025, 4, true);
-  stock.add(mesh(bgeo, border, 0, 0, zf + 0.004), mesh(bgeo, border, 0, 0, -zf - 0.004));
+  for (const s of [1, -1]) {
+    const bpts = panel.getPoints(24).map((v) => new THREE.Vector3(v.x, v.y, s * (surfZ(v.x, v.y) + 0.02)));
+    stock.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bpts, true), 220, 0.025, 4, true), border));
+  }
   A.add(stock, 'buttstock');
+  const slope = (x) => (bellyY(x + 0.2) - bellyY(x - 0.2)) / 0.4;
 
-  // --- grip cap
-  const capS = rpoly([[-1.85, -0.2, 0.2], [1.85, -0.2, 0.2], [1.85, 0.2, 0.15], [-1.85, 0.2, 0.15]], 0.15);
-  const capG = group(-27.85, -13.6, 0, mesh(extrudeXY(capS, 2.55, 0.15), M.polymer));
-  capG.rotation.z = 0.206;
-  capG.add(mesh(rcyl(0.4, 0.4, 0.06, 24), M.steelSatin, 0, -0.2, 0));
+  // --- grip cap: a low oval button set into the belly where the grip ends
+  const capX = -27.4;
+  const capG = group(capX, bellyY(capX) + 0.1, 0, mesh(new THREE.SphereGeometry(1, 32, 16).scale(1.5, 0.3, 0.6), M.polymer));
+  capG.rotation.z = Math.atan(slope(capX));
+  capG.add(mesh(rcyl(0.3, 0.3, 0.06, 24), M.steelSatin, 0, -0.29, 0));
   A.add(capG, 'grip cap', {ex: [0, -2.4, 0], delay: 0.3});
 
-  // --- sling swivel stud on the belly
-  const stud = group(-38.6, -16.4, 0);
-  stud.rotation.z = -0.6;
+  // --- sling swivel stud on the belly, square to it
+  const studX = -38.6;
+  const stud = group(studX, bellyY(studX) + 0.15, 0);
+  stud.rotation.z = Math.atan(slope(studX));
   stud.add(mesh(rcyl(0.22, 0.32, 0.9, 20), M.steelSatin, 0, -0.35, 0));
   stud.add(mesh(new THREE.TorusGeometry(0.42, 0.1, 10, 24), M.steelSatin, 0, -1.05, 0));
   A.add(stud, 'swivel stud', {ex: [0, -3.0, 0], delay: 0.4});
