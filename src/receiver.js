@@ -100,7 +100,7 @@ export function buildReceiver() {
       g.add(mesh(slotG, M.steelInner, 0.12, 0, 0, a + s, 0, 0));
       body.add(g);
     }
-  A.add(body, 'receiver');
+  A.add(body, 'receiver', {xray: true}); // the pump cycle turns this to x-ray
 
   // --- ejector: spring-steel blade riveted inside the left wall
   const ejS = rpoly([[-5.8, -0.25], [-1.2, -0.25], [-0.7, 0.15], [-0.9, 0.45], [-5.8, 0.45]], 0.12);

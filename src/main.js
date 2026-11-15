@@ -13,7 +13,7 @@ import {buildTrigger} from './trigger.js';
 import {buildStock} from './stock.js';
 import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN} from './tour.js';
-import {channels, createShells, strokeAt, cAtStroke} from './cycle.js';
+import {channels, createShells, strokeAt, cAtStroke, TICKS, tickAt, CYCLE_S} from './cycle.js';
 import {MAG_Y} from './barrel.js';
 import {PUMP} from './forend.js';
 
@@ -105,6 +105,27 @@ async function main() {
   const [lLine, lDot, lHalo] = lead.children;
   const card = el('div', 'iw-card', '<div class="nm"></div><div class="as"></div>', ui);
   const dock = el('div', 'iw-dock', null, ui);
+  // CYCLE panel: scrubber for c with 6 labelled ticks, play/pause, step, speeds, seconds readout
+  const ico = {
+    prev: '<svg viewBox="0 0 16 16"><rect x="3" y="3" width="1.8" height="10"/><path d="M13 3 6 8l7 5z"/></svg>',
+    play: '<svg viewBox="0 0 16 16"><path class="pl" d="M5 2.8 13.2 8 5 13.2z"/><path class="pa" d="M4.2 3h2.6v10H4.2zM9.2 3h2.6v10H9.2z"/></svg>',
+    next: '<svg viewBox="0 0 16 16"><rect x="11.2" y="3" width="1.8" height="10"/><path d="M3 3l7 5-7 5z"/></svg>',
+  };
+  const cycEl = el(
+    'div',
+    'iw-cyc',
+    `<label>Cycle</label><div class="iw-cb"><button class="iw-ib" data-a="prev" aria-label="Step back">${ico.prev}</button>` +
+      `<button class="iw-ib iw-play" data-a="play" aria-label="Play">${ico.play}</button><button class="iw-ib" data-a="next" aria-label="Step forward">${ico.next}</button></div>` +
+      `<div class="iw-tl"><input class="iw-range" type="range" min="0" max="1" step="0.001" value="0" aria-label="Cycle position"><div class="iw-ticks">` +
+      TICKS.map((t) => `<span style="--x:${t.c}"><i></i><b>${t.name}</b></span>`).join('') +
+      `</div></div><div class="iw-spd"><button data-s="1">1x</button><button data-s="0.25" class="on">0.25x</button><button data-s="0.1">0.1x</button></div>` +
+      `<output class="iw-sec">0.00 s</output>`,
+    dock,
+  );
+  const cRange = cycEl.querySelector('.iw-range');
+  const cOut = cycEl.querySelector('.iw-sec');
+  const cPlay = cycEl.querySelector('.iw-play');
+  const tickEls = [...cycEl.querySelectorAll('.iw-ticks span')];
   const ctl = el('div', 'iw-ctl', '<label>Explode</label>', dock);
   const range = el('input', 'iw-range', null, ctl);
   Object.assign(range, {type: 'range', min: 0, max: 1, step: 0.001, value: 0});
@@ -328,6 +349,47 @@ async function main() {
   };
   addEventListener('pointerup', endDrag);
   addEventListener('pointercancel', endDrag);
+  const engage = () => {
+    // the cycle runs on the assembled gun
+    if (tour.active) stopTour();
+    st.target = 0;
+    range.value = 0;
+    lastInput = performance.now();
+  };
+  cRange.addEventListener('input', () => {
+    engage();
+    cyc.playing = false;
+    cyc.tw = null;
+    st.c = Number(cRange.value);
+  });
+  const stepTo = (to, from = st.c) => (cyc.tw = {from, to, t0: performance.now(), dur: 450});
+  cycEl.querySelector('.iw-cb').onclick = (e) => {
+    const a = e.target.closest('button')?.dataset.a;
+    if (!a) return;
+    engage();
+    if (a === 'play') {
+      cyc.tw = null;
+      cyc.playing = !cyc.playing;
+      if (cyc.playing && st.c >= 0.999) st.c = 0;
+      return;
+    }
+    cyc.playing = false;
+    if (a === 'next') {
+      const n = TICKS.find((t) => t.c > st.c + 1e-3);
+      n ? stepTo(n.c) : stepTo(TICKS[1].c, 0); // from Locked, round to the next cycle
+    } else {
+      const pv = [...TICKS].reverse().find((t) => t.c < st.c - 1e-3);
+      pv ? stepTo(pv.c) : stepTo(TICKS[TICKS.length - 2].c, 1);
+    }
+  };
+  cycEl.querySelector('.iw-spd').onclick = (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    cyc.speed = Number(b.dataset.s);
+    [...b.parentNode.children].forEach((k) => k.classList.toggle('on', k === b));
+  };
+  const partByName = (n) => (n === 'shell' ? shells.fresh : asms.flatMap((a) => a.parts).find((p) => p.name === n)?.obj);
+  let lastTick = -1;
   const asmLabel = Object.fromEntries(asms.map((a, i) => [a.key, `${String(i + 1).padStart(2, '0')} · ${a.label}`]));
   function pick(force = false) {
     if (!pointer || (fly && !force)) return null;
@@ -338,22 +400,25 @@ async function main() {
       if (!root) continue;
       const ai = asms.findIndex((a) => a.key === root.userData.asm);
       if (dim[ai] > 0.4) continue;
+      if (xr > 0.5 && root.userData.part === 'receiver') continue; // x-ray: pick what is inside
       anchor.copy(root.worldToLocal(h.point.clone()));
       return root;
     }
     return null;
   }
   const cardPos = {x: 0, y: 0, side: 1, init: false};
-  function setHover(h) {
+  const hb = new THREE.Box3();
+  function setHover(h, centre = false) {
     if (h === hovered) return;
     hovered = h;
+    if (h && centre) anchor.copy(h.worldToLocal(hb.setFromObject(h).getCenter(new THREE.Vector3())));
     cardPos.init = false;
     S.select(h);
     card.classList.toggle('show', !!h);
     if (h) {
       card.children[0].textContent = h.userData.part;
       const al = asmLabel[h.userData.asm];
-      card.children[1].textContent = al.split(' · ')[1].toLowerCase() === h.userData.part.toLowerCase() ? `assembly ${al.split(' · ')[0]}` : al;
+      card.children[1].textContent = !al ? 'cartridge' : al.split(' · ')[1].toLowerCase() === h.userData.part.toLowerCase() ? `assembly ${al.split(' · ')[0]}` : al;
     }
   }
   /** Leader from the hit point: short diagonal, then a horizontal run into the card's edge. */
@@ -448,6 +513,29 @@ async function main() {
     }
     out.value = st.explode.toFixed(2);
     range.style.setProperty('--p', `${(st.explode * 100).toFixed(1)}%`);
+    if (!tour.active) {
+      if (cyc.tw) {
+        const t = clamp01((now - cyc.tw.t0) / cyc.tw.dur);
+        st.c = cyc.tw.from + (cyc.tw.to - cyc.tw.from) * ease(t);
+        if (t >= 1) cyc.tw = null;
+      } else if (cyc.playing) {
+        st.c += (dt * cyc.speed) / CYCLE_S;
+        if (st.c >= 1) {
+          st.c = 0;
+          cyc.playing = false;
+        }
+      }
+    }
+    // cycle panel readout; x-ray the receiver while the cycle is off closed
+    cRange.value = st.c;
+    cRange.style.setProperty('--p', `${(st.c * 100).toFixed(1)}%`);
+    cOut.value = `${(st.c * CYCLE_S).toFixed(2)} / ${CYCLE_S.toFixed(2)} s`;
+    cPlay.classList.toggle('on', cyc.playing);
+    const active = st.c > 0.0005 && st.explode < 0.05;
+    const ti = tickAt(st.c);
+    if (ti !== lastTick) tickEls.forEach((e, i) => e.classList.toggle('on', i === ti));
+    lastTick = ti;
+    xr += ((active ? 1 : 0) - xr) * (still ? 1 : 1 - Math.exp(-dt * 7));
     const kc = tour.active ? st.pump : channels(st.c);
     poseAll(st.explode, kc);
     shells.pose(st.c, st.c > 0 && st.explode < 0.02);
@@ -473,7 +561,11 @@ async function main() {
     else camera.lookAt(controls.target);
 
     // hover outline + name card
-    if (!pinned && !drag) setHover(tour.active ? null : pick());
+    if (!pinned && !drag) {
+      const ph = tour.active ? null : pick();
+      if (ph || !active) setHover(ph);
+      else setHover(partByName(TICKS[ti].part) || null, true); // the active tick's part
+    }
     else if (hovered && dim[asms.findIndex((a) => a.key === hovered.userData.asm)] > 0.4) {
       pinned = false;
       setHover(null);
