@@ -105,14 +105,15 @@ async function main() {
   const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${{high: 'HIGH', med: 'MEDIUM', low: 'LOW'}[S.tier]} quality${dropped.map((k) => ' · ' + k).join('')} · ${gpuName}`);
   const dropped = []; // adaptive quality steps taken this visit
 
-  // --- quality tier: ?q=high|med|low forces it; then a remembered header choice; phones start LOW;
+  // --- quality tier: ?q=high|med|low forces it; then a header choice the visitor made (key v2: tiers saved
+  // by earlier builds are ignored); phones start LOW;
   // a renderer string naming NVIDIA RTX/GTX, Radeon RX, Arc or Apple M-series starts HIGH; everything
   // else (Radeon(TM) Graphics, Intel UHD/Iris, unknown strings) starts MEDIUM
   const TIERS = ['high', 'med', 'low'];
   const forced = TIERS.includes(q.get('q')) ? q.get('q') : null;
   let stored = null;
   try {
-    stored = localStorage.getItem('ironwood.q');
+    stored = localStorage.getItem('ironwood.tier.v2');
   } catch (e) {}
   if (!TIERS.includes(stored)) stored = null;
   const gl = S.renderer.getContext();
@@ -132,7 +133,7 @@ async function main() {
     if (!t) return;
     S.setTier(t);
     try {
-      localStorage.setItem('ironwood.q', t);
+      localStorage.setItem('ironwood.tier.v2', t);
     } catch (err) {}
     showQ();
     setHint();
