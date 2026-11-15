@@ -10,7 +10,10 @@ const {CHROMIUM_ARGS} = await import(pathToFileURL(path.join(skill, 'paths.mjs')
 const [W = 1920, H = 1080, extra = ''] = process.argv.slice(2);
 const browser = await chromium.launch({args: CHROMIUM_ARGS});
 const page = await browser.newPage({viewport: {width: +W, height: +H}, deviceScaleFactor: 1});
+// THROTTLE=<n>: Chrome CPU throttling n x (CDP); GPU_LOAD=<k>: device scale factor k, which the tier
+// caps at DPR 1.25 on MEDIUM, so a 4x GPU load is set by the viewport instead (e.g. 3840 2160 on a 1080p panel)
 const errs = [];
+if (process.env.THROTTLE) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', {rate: +process.env.THROTTLE});
 page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
 await page.goto(pathToFileURL(path.resolve('docs/index.html')).href + '?perf=1' + (/(^|&)q=/.test(extra) ? '' : '&q=high') + (extra ? '&' + extra : ''));
@@ -18,7 +21,7 @@ await page.waitForFunction(() => window.__READY, null, {timeout: 60000});
 const read = () => page.evaluate(() => JSON.parse(JSON.stringify({...window.__PERF, reset: 0})));
 const wait = (ms) => page.waitForTimeout(ms);
 const reset = () => page.evaluate(() => window.__PERF.reset());
-await wait(1500);
+await wait(1500 + +(process.env.SETTLE || 0));
 const still = await read(); // drawn in the second before the last overlay update, with no input
 await wait(4000); // the idle auto-turn starts 5 s after the last input
 await reset();

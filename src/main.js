@@ -711,12 +711,12 @@ async function main() {
   let turning = false;
   // adaptive quality: a mean frame time over 20 ms across 1 s of consecutive drawn frames (never the
   // 30 fps turn; rAF alternates 17/33 ms under load, so no single frame decides) drops one step
-  // (SSAO, reflection, DPR 1); it never steps back up in this visit
+  // (SSAO, reflection, shadow map 1024, DPR 1, shadows off); it never steps back up in this visit
   let drewLast = false;
   let lastDraw = 0;
   const slow = []; // [t, ms] of consecutive drawn frames, last second
-  const STEP = {ssao: 'no SSAO', reflection: 'no reflection', dpr: 'DPR 1'};
-  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, TIERS.indexOf(S.tier), hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
+  const STEP = {ssao: 'no SSAO', reflection: 'no reflection', shadowmap: 'shadow map 1024', dpr: 'DPR 1', shadows: 'no shadows'};
+  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, TIERS.indexOf(S.tier), Object.keys(S.cut).length, hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
   const camOf = () => [...camera.position.toArray(), ...camera.quaternion.toArray(), camera.aspect];
   const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {

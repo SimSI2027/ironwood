@@ -254,16 +254,20 @@ export function createStage(canvas) {
     catcher.visible = true;
   }
   /** high: 4096 shadow, GTAO, bloom, outline, reflection 1024, DPR <= 2. med: 1024 shadow, no GTAO, reflection 512, DPR <= 1.25. low: 1024 shadow, no post, DPR 1. */
-  const setTier = (t) => {
-    S.tier = t;
-    const hi = t === 'high';
-    key.shadow.mapSize.set(hi ? 4096 : 1024, hi ? 4096 : 1024);
-    key.shadow.radius = hi ? 40 : 22; // texels: ~2 world units of blur on high, ~5 on low
-    key.shadow.blurSamples = hi ? 20 : 24;
+  const disposeShadow = () => {
     key.shadow.map?.dispose();
     key.shadow.mapPass?.dispose();
     key.shadow.map = key.shadow.mapPass = null;
     renderer.shadowMap.needsUpdate = true;
+  };
+  const setTier = (t) => {
+    S.tier = t;
+    const hi = t === 'high';
+    const sm = hi && !S.cut.shadowmap ? 4096 : 1024;
+    key.shadow.mapSize.set(sm, sm);
+    key.shadow.radius = hi ? 40 : 22; // texels: ~2 world units of blur on high, ~5 on low
+    key.shadow.blurSamples = hi ? 20 : 24;
+    disposeShadow();
     showFloors();
     floorR.getRenderTarget().setSize(hi ? 1024 : 512, hi ? 1024 : 512);
     ao.enabled = hi && !S.cut.ssao;
@@ -271,15 +275,18 @@ export function createStage(canvas) {
     select(sel);
   };
   /**
-   * Adaptive quality: one step down per call, never back up: SSAO off, then the floor reflection off,
-   * then DPR 1. Steps that change nothing here (no SSAO on low, DPR already 1) are skipped.
+   * Adaptive quality: one step down per call, never back up: SSAO off, floor reflection off, shadow map
+   * 1024, DPR 1, shadows off. Steps that change nothing here (no SSAO on MEDIUM/LOW, shadow map already
+   * 1024, DPR already 1) are skipped.
    * Returns the step taken, or null when none is left.
    */
   const degrade = () => {
     const steps = [
       ['ssao', () => ao.enabled, () => (ao.enabled = false)],
       ['reflection', () => floorR.visible, () => (floorR.material.uniforms.uStrength.value = 0)],
+      ['shadowmap', () => key.shadow.mapSize.x > 1024, () => ((key.shadow.mapSize.x = key.shadow.mapSize.y = 1024), disposeShadow())],
       ['dpr', () => renderer.getPixelRatio() > 1, () => 0],
+      ['shadows', () => renderer.shadowMap.enabled, () => ((renderer.shadowMap.enabled = false), scene.traverse((o) => o.material && [o.material].flat().forEach((m) => (m.needsUpdate = true))))],
     ];
     for (const [k, live, off] of steps) {
       if (S.cut[k]) continue;
