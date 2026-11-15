@@ -36,9 +36,10 @@ export function noBloom(m) {
  * Oiled walnut: long grain along the part's local X, two brown tones and dark figure.
  * opt.dark tints it (checkered panels), opt.seed shifts the figure between parts.
  */
-export function walnut({seed = 0, dark = 0, bump = null, bumpScale = 0} = {}) {
+export function walnut({seed = 0, dark = 0, bump = null, bumpScale = 0, tint = 1, specular = 1} = {}) {
   const m = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
+    color: new THREE.Color(tint, tint, tint), // base tone only; the grain below is shared
+    specularIntensity: specular,
     roughness: 0.5,
     metalness: 0,
     clearcoat: 0.15,
@@ -265,8 +266,8 @@ export function makeMaterials() {
     rib: new THREE.MeshPhysicalMaterial({color: 0x1f252e, metalness: 1, roughness: 0.55, bumpMap: lineTexture(), bumpScale: 1.2, envMap: ENV, envMapIntensity: 0.6}),
     walnut: (seed, opt) => walnut({seed, ...opt}),
     // the one walnut of the forend and the stock: same two tones, figure and grain scale (an
-    // instance per assembly only so each can dim on its own)
-    wood: () => walnut({seed: 0}),
+    // instance per assembly only so each can dim on its own). opt: base tone and specular only.
+    wood: (opt) => walnut({seed: 0, ...opt}),
   };
   M.rib.bumpMap.repeat.set(1, 1);
   // Lathe uv runs u around the tube, so the default tangent is circumferential; turn it 90°

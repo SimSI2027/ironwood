@@ -9,6 +9,9 @@ export const FOREND_L = 22.5;
 export const BAR_Z = 1.175;
 export const PUMP = -7.5; // cm of travel for a full stroke (forend, action bars, slide)
 export const BOLT_TRAVEL = PUMP; // the bolt runs exactly the slide length
+// the forend's own base tone and specular (same grain as the stock): its ribs catch every light, so it
+// reads lighter than the stock; measured in the default view, the average colour is within 2.5% of the stock's, per channel
+const FOREND_WOOD = {tint: 0.966, specular: 0.25};
 
 /** Ribbed C-section shell: open at the top so it hugs the barrel. */
 function ribbedShell(L, Ri, Ro, open, ribs) {
@@ -55,7 +58,7 @@ export function buildForend() {
   const all = {pump: PUMP};
 
   // --- walnut grip
-  const wood = mesh(ribbedShell(FOREND_L, 1.36, 2.08, 0.62, 9), M.wood(), FOREND_X0, MAG_Y + 0.38, 0);
+  const wood = mesh(ribbedShell(FOREND_L, 1.36, 2.08, 0.62, 9), M.wood(FOREND_WOOD), FOREND_X0, MAG_Y + 0.38, 0);
   A.add(wood, 'forend', {...all, ex: [0, -4.2, 0], delay: 0.2});
 
   // --- slide tube, the steel sleeve the grip is pinned to
