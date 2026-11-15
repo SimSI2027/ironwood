@@ -94,3 +94,7 @@ html, body { background: var(--iw-bg); }
   .iw-btn.on:hover { border-color: var(--iw-brass); }
 }
 .iw-tour.on { background: linear-gradient(90deg, var(--iw-brass) var(--t, 0%), rgba(210, 169, 87, 0.55) var(--t, 0%)); }
+/* low tier has no post: the vignette is drawn here instead */
+.iw-vig { position: absolute; inset: 0; pointer-events: none; display: none;
+  background: radial-gradient(ellipse 75% 75% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.4) 100%); }
+.iw-vig.on { display: block; }

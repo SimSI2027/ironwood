@@ -55,7 +55,16 @@ async function main() {
   const ui = el('div', 'iw', null, app);
   const head = el('div', 'iw-head', '<span class="iw-brand">IRONWOOD <b>Mk I</b></span><span class="iw-dot">·</span><span class="iw-sub">Exploded view. Drag, scroll, take it apart.</span>', ui);
   el('div', 'iw-rule', null, ui);
-  el('div', 'iw-hint', `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes`, ui);
+  const hint = el('div', 'iw-hint', null, ui);
+  const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${S.tier} quality`);
+
+  // --- quality tier: ?q=high|low forces it; phones start low; otherwise start high and let a
+  // 1 s frame-time probe at load drop to low if the median frame is slower than ~48 fps
+  const forced = ['high', 'low'].includes(q.get('q')) ? q.get('q') : null;
+  const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
+  S.setTier(forced || (phone ? 'low' : 'high'));
+  let probe = forced || phone ? null : {n: 0, t0: 0, dts: []};
+  setHint();
   const lead = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   lead.setAttribute('class', 'iw-lead');
   lead.innerHTML = '<polyline points="" visibility="hidden"/><circle r="2.6" visibility="hidden"/><circle r="6" class="halo" visibility="hidden"/>';
@@ -207,7 +216,7 @@ async function main() {
     if (h === hovered) return;
     hovered = h;
     cardPos.init = false;
-    S.outline.selectedObjects = h ? [h] : [];
+    S.select(h);
     card.classList.toggle('show', !!h);
     if (h) {
       card.children[0].textContent = h.userData.part;
@@ -259,9 +268,26 @@ async function main() {
 
   const still = q.has('still');
   let prev = performance.now();
+  let lastE = NaN;
+  let lastP = NaN;
   const tick = (now) => {
-    const dt = Math.min(0.05, (now - prev) / 1000);
+    const raw = now - prev;
+    const dt = Math.min(0.05, raw / 1000);
     prev = now;
+    if (probe) {
+      // skip the first 10 frames (shader compiles, shadow first-render), then sample one second
+      probe.n++;
+      if (probe.n === 11) probe.t0 = now;
+      else if (probe.n > 11) probe.dts.push(raw);
+      if (probe.t0 && now - probe.t0 > 1000) {
+        const d = probe.dts.sort((x, y) => x - y);
+        const med = d[d.length >> 1] || 0;
+        if (med > 21) S.setTier('low');
+        window.__PROBE = {median: +med.toFixed(1), frames: d.length, tier: S.tier};
+        probe = null;
+        setHint();
+      }
+    }
 
     if (tour.active) {
       const k = tour.at((now - tour.t0) / 1000);
@@ -311,10 +337,16 @@ async function main() {
     if (hovered) drawLeader(dt);
     else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 
+    // shadows follow the parts, not the camera: re-render them only when something moved
+    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.pump - lastP) > 1e-5 || Number.isNaN(lastE)) {
+      S.renderer.shadowMap.needsUpdate = true;
+      lastE = st.explode;
+      lastP = st.pump;
+    }
     S.render();
     if (!window.__READY) {
       window.__READY = true;
-      window.__STATS = {meshes: meshes.length, parts: asms.reduce((n, a) => n + a.parts.length, 0), tris: S.renderer.info.render.triangles};
+      window.__STATS = {meshes: meshes.length, parts: asms.reduce((n, a) => n + a.parts.length, 0), tris: S.renderer.info.render.triangles, tier: S.tier};
     }
     requestAnimationFrame(tick);
   };

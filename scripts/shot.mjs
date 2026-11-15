@@ -32,7 +32,7 @@ if (TAP != null) {
   await page.waitForTimeout(700);
   console.log('tap', JSON.stringify(p), 'card', await page.evaluate(() => document.querySelector('.iw-card').className + ' ' + document.querySelector('.iw-card .nm').textContent));
 }
-const stats = await page.evaluate(() => window.__STATS);
+const stats = await page.evaluate(() => ({...window.__STATS, probe: window.__PROBE}));
 console.log('stats', JSON.stringify(stats));
 console.log('errors', errs.length ? errs.slice(0, 12).join('\n') : 'none');
 if (out) await page.screenshot({path: out});
