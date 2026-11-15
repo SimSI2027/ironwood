@@ -1,10 +1,10 @@
-# STATUS — 2026-11-15, session 3 (brought up to IRONWOOD_JOB.md v2; gap list in GAPS.md)
-- Done 2e: tiers. High: 4096 VSM, GTAO, brass-only bloom (warm-keyed high-pass), outline pass, DPR 2. Low: no post, CSS vignette, inverted-hull hover outline, DPR 1.5. Picked by a 1 s probe (skips 10 frames, median >21 ms -> low); phones start low; ?q=high|low forces. Shadows re-render only when parts move.
-- Done 2c: explode in 2 stages. Axial slide 0-0.5, then rows + part fan-out 0.45-1. Bolt/trigger move in stage 2 only; magazine x 12->18 so the barrel ring clears its cap; tour beats 0.62->0.7.
-- 2a/2b/2d were already in the code: verified by reading, no changes. Tab title "src" -> IRONWOOD Mk I via scripts/build.sh (use it to build).
-- Done 3: LICENSE -> ED, README rifle -> shotgun, git user ED + GitHub noreply, every commit re-authored, force-pushed.
-- Decisions: 3 screenshots (your prompt) over the job file's 2; IRONWOOD_JOB.md left untracked as found.
-- Screenshots (cutaway-out/s3-*.png) showed a blank model in high tier: bloom blurred NaN/Inf pixels over the whole frame. Fixed in the bloom high-pass, plus a clamp in the vignette pass that removed black specks. Verified by pixel probe only, not by eye.
-- Skipped: nothing (no fix failed twice). Root source of the NaN/Inf pixels not found, only filtered.
-- Look first: 1) high tier on your GPU, which nobody has seen since the fix: model visible, bloom strength, GTAO darkness.
-- 2) explode 0.5-0.8: nested parts (forend on the magazine tube, bolt through the receiver roof, trigger pins) still pass through each other. 3) tour/explode frame rate on a laptop: the 4096 VSM blur re-runs every frame a part moves.
+# STATUS — 2026-11-15, session 4 (fixes 1-7, pump cycle 8-12, shipped)
+- Done 1-7: pill fill (a cascade tie hid it), GPU-string / 12 ms probe + remembered HIGH/LOW toggle, 8% point-fit camera refit on resize, one-row pills (strip <700 px), dim keeps material at 30%/0.5 + brass rim, CSS gradient + reflective floor with contact band and light pool, screws, pin ends, knurl, checkering normal map, 0.4 mm bevels, bolt machining lines.
+- Done 8-11: src/cycle.js keys every channel off c (forend, bolt, locking block, elevator, dented spent shell, crimped fresh shell); forend drag with orbit off; CYCLE panel; x-ray receiver + tick name card; tour cycle at 0.25x, so the tour is now 22.2 s.
+- Done 12 + ship: job file edited but still untracked, as last session left it. Pages https://simsi2027.github.io/ironwood/ returned 200 with this build.
+- Screenshots: cutaway-out/s4-{assembled,pill,eject}.png. Fixed after them, checked by pixel readback only: dimmed brass bloomed, Closed/Unlock labels overlapped, ejected shell popped out of the receiver top.
+- Decisions: the probe times render + 1 px readback, not the rAF interval (a 60 Hz screen never averages <12 ms); default speed 0.25x; Play stops at Locked and snaps to Closed; using the cycle assembles the gun.
+- Skipped: nothing failed twice. Left as is: the job file still says the tour is 20 s with "pump twice" (you asked for two edits only).
+- Look first 1) receiver close-up (pill 04) on your 4090: headless drew ~1 frame/s, so shot 2 caught the dim fade mid-way; also the receiver's top edge saturates white.
+- 2) the cycle at 0.25x and by dragging the forend: parts pass through each other (shell vs mag tube and barrel extension; the bolt runs 10 cm on a 7.5 cm slide). Judge whether the choreography reads.
+- 3) phone: the low tier now draws the floor reflection too (scene rendered twice), and the dock is 219 px tall at 390x844. Check fps and that the gun isn't squeezed.
