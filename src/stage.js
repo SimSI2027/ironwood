@@ -32,8 +32,8 @@ const Vignette = {
     }`,
 };
 
-// Bloom high-pass keyed to warm, saturated highlights: brass blooms, white steel and clearcoat
-// specular does not, dark walnut never reaches the threshold.
+// Bloom high-pass: luminance over 0.9. Every gun, shell and floor surface is soft-capped under it
+// (NO_BLOOM), so only the muzzle flash, the primer spark and the hull's Burn glow can bloom.
 const BRASS_HIGHPASS = `
   uniform sampler2D tDiffuse; uniform vec3 defaultColor; uniform float defaultOpacity;
   uniform float luminosityThreshold; uniform float smoothWidth; varying vec2 vUv;
@@ -44,8 +44,7 @@ const BRASS_HIGHPASS = `
     if (any(isnan(t)) || any(isinf(t))) t = vec4(0.0);
     t.rgb = min(t.rgb, vec3(32.0));
     float l = dot(t.rgb, vec3(0.299, 0.587, 0.114));
-    float warm = smoothstep(0.5, 0.8, (t.r - t.b) / max(t.r, 1e-4));
-    float a = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, l) * warm;
+    float a = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, l);
     gl_FragColor = mix(vec4(defaultColor, defaultOpacity), t, a);
   }`;
 
@@ -158,7 +157,7 @@ export function createStage(canvas) {
     showFloors();
   };
   composer.addPass(ao);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.55, 0.45, 0.5);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.25, 0.45, 0.9);
   bloom.highPassUniforms.smoothWidth.value = 0.5;
   bloom.materialHighPassFilter.fragmentShader = BRASS_HIGHPASS;
   bloom.materialHighPassFilter.needsUpdate = true;

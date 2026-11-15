@@ -1,6 +1,6 @@
 // One assembly = one group of named parts. Each part knows where it rests and how it fans out.
 import * as THREE from 'three';
-import {makeMaterials} from './materials.js';
+import {makeMaterials, NO_BLOOM} from './materials.js';
 
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (t * 6 - 15) + 10));
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
@@ -30,8 +30,8 @@ function look(m, U) {
         `#include <emissivemap_fragment>
         totalEmissiveRadiance += vec3(0.95, 0.66, 0.26) * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.5) * uRim;`,
       )
-      .replace('#include <opaque_fragment>', // dimmed parts are also capped under the bloom threshold, so dim brass cannot glow
-        'outgoingLight = min(outgoingLight * uDim, vec3(mix(64.0, 0.3, clamp((1.0 - uDim) / 0.7, 0.0, 1.0))));\n#include <opaque_fragment>',
+      .replace('#include <opaque_fragment>', // every part is soft-capped under the bloom threshold (0.9): pins, bead and brass never glow
+        'outgoingLight = min(outgoingLight * uDim, vec3(mix(64.0, 0.3, clamp((1.0 - uDim) / 0.7, 0.0, 1.0))));\n' + NO_BLOOM + '\n#include <opaque_fragment>',
       );
   };
   m.customProgramCacheKey = () => key + '|look';

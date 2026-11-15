@@ -62,7 +62,7 @@ export function createFireFX() {
   const hot = glowTex([[0, 'rgba(255,250,235,1)'], [0.25, 'rgba(255,190,90,0.85)'], [0.6, 'rgba(255,110,30,0.25)'], [1, 'rgba(255,80,10,0)']]);
 
   // spark at the primer (shell base, x 0 in the gun frame)
-  const spark = add(new THREE.Sprite(additive(hot, 0xffd9a0)));
+  const spark = add(new THREE.Sprite(additive(hot, new THREE.Color(0xffd9a0).multiplyScalar(1.6)))); // core over the 0.9 bloom threshold
   spark.position.set(-0.05, 0, 0);
 
   // wad and shot column, glowing: one part for the name card
