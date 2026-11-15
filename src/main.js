@@ -13,7 +13,9 @@ import {buildTrigger} from './trigger.js';
 import {buildStock} from './stock.js';
 import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN} from './tour.js';
-import {channels, createShells} from './cycle.js';
+import {channels, createShells, strokeAt, cAtStroke} from './cycle.js';
+import {MAG_Y} from './barrel.js';
+import {PUMP} from './forend.js';
 
 const q = new URLSearchParams(location.search);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -267,6 +269,65 @@ async function main() {
     if (!h) pointer = null;
     setHover(h);
   });
+  // --- drag the forend along the barrel axis to drive the cycle: pulling back runs c 0 -> 0.5,
+  // pushing forward 0.5 -> 1. Pointer-down on it disables orbit until release.
+  const cyc = {playing: false, speed: 0.25, tw: null};
+  let drag = null;
+  const canDrag = (h) => h && h.userData.asm === 'forend' && st.explode < 0.05 && !tour.active;
+  app.addEventListener(
+    'pointerdown',
+    (e) => {
+      // capture phase on the parent: runs before OrbitControls' own listener on the canvas
+      if (e.target !== canvas) return;
+      setNdc(e);
+      const keep = pointer;
+      pointer = {x: e.clientX, y: e.clientY};
+      const h = pick(true);
+      pointer = keep;
+      if (!canDrag(h)) return;
+      controls.enabled = false;
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      drag = {id: e.pointerId, x: e.clientX, y: e.clientY};
+      cyc.playing = false;
+      cyc.tw = null;
+      fly = null;
+      lastInput = performance.now();
+    },
+    true,
+  );
+  function dragStroke(ds) {
+    let c = st.c;
+    if (c >= 1 - 1e-4 && ds > 0) c = 0; // a finished cycle: pulling again starts the next one
+    const s = Math.min(1, Math.max(0, strokeAt(c) + ds));
+    if (c < 0.5) c = s >= 1 - 1e-4 ? 0.5 : cAtStroke(s, false);
+    else c = s >= 1 ? 0.5 : cAtStroke(s, true);
+    st.c = c;
+  }
+  const axA = new THREE.Vector3();
+  const axB = new THREE.Vector3();
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    // the barrel axis on screen, in px per cm, at the magazine line
+    const a = S.project(gun.localToWorld(axA.set(14, MAG_Y, 0)));
+    const b = S.project(gun.localToWorld(axB.set(24, MAG_Y, 0)));
+    const ax = (b.x - a.x) / 10;
+    const ay = (b.y - a.y) / 10;
+    const l2 = ax * ax + ay * ay;
+    if (l2 > 1e-4) dragStroke(((e.clientX - drag.x) * ax + (e.clientY - drag.y) * ay) / l2 / PUMP);
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    lastInput = performance.now();
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag = null;
+    controls.enabled = true;
+    if (st.c >= 0.999 || st.c <= 0.001) st.c = 0; // back to closed: x-ray off
+  };
+  addEventListener('pointerup', endDrag);
+  addEventListener('pointercancel', endDrag);
   const asmLabel = Object.fromEntries(asms.map((a, i) => [a.key, `${String(i + 1).padStart(2, '0')} · ${a.label}`]));
   function pick(force = false) {
     if (!pointer || (fly && !force)) return null;
@@ -412,11 +473,12 @@ async function main() {
     else camera.lookAt(controls.target);
 
     // hover outline + name card
-    if (!pinned) setHover(tour.active ? null : pick());
+    if (!pinned && !drag) setHover(tour.active ? null : pick());
     else if (hovered && dim[asms.findIndex((a) => a.key === hovered.userData.asm)] > 0.4) {
       pinned = false;
       setHover(null);
     }
+    canvas.style.cursor = drag ? 'grabbing' : canDrag(hovered) ? 'grab' : '';
     if (hovered) drawLeader(dt);
     else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 

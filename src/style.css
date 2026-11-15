@@ -11,7 +11,7 @@
 }
 html, body { background: var(--iw-bg); }
 #app { position: fixed; inset: 0; overflow: hidden; background: linear-gradient(180deg, #15171c 0%, #07080a 100%); }
-#gl { touch-action: none; cursor: grab; }
+#gl { touch-action: none; cursor: default; }
 #gl:active { cursor: grabbing; }
 
 .iw { font-family: var(--iw-font); color: var(--iw-fg); font-variant-caps: all-small-caps; letter-spacing: 0.09em; }
