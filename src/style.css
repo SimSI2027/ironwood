@@ -44,11 +44,27 @@ html, body { background: var(--iw-bg); }
 .iw-play.on .pa { display: inline; }
 .iw-play.on { background: #c9a24b; border-color: #c9a24b; color: #111; }
 .iw-tl { flex: 1; min-width: 0; position: relative; padding-bottom: 17px; }
+/* FIRE / PUMP / FULL */
+.iw-seg { display: inline-flex; gap: 4px; }
+.iw-seg button { font: inherit; font-size: 13px; font-weight: 600; letter-spacing: 0.16em; color: var(--iw-fg); background: transparent;
+  border: 1px solid var(--iw-line); border-radius: 999px; padding: 4px 10px; cursor: pointer; transition: border-color .2s; }
+.iw-seg button:hover { border-color: #c9a24b; }
+.iw-seg button.on { background: #c9a24b; border-color: #c9a24b; color: #111; }
+/* the clock track: two labelled segments; the active one (70%) shows its tick labels */
+.iw-segl { position: absolute; left: 58px; right: 60px; top: -3px; height: 10px; pointer-events: none; }
+.iw-segl b { position: absolute; top: 0; font-weight: 600; font-size: 10px; letter-spacing: 0.2em; color: var(--iw-dim); white-space: nowrap; }
+.iw-segl b:first-child { left: 0; }
+.iw-segl b:last-child { left: calc(var(--w, 0.7) * 100%); padding-left: 6px; border-left: 1px solid var(--iw-mute); }
+.iw-ticks span.hid b { visibility: hidden; }
+/* desktop: buttons, speeds and readout on the first row, the full-width clock track under them */
+.iw-cyc { flex-wrap: wrap; row-gap: 2px; }
+.iw-cyc > .iw-tl { order: 9; flex-basis: 100%; }
+.iw-cyc > .iw-sec { margin-left: auto; }
 .iw-tl .iw-range { display: block; width: 100%; }
-.iw-ticks { position: absolute; left: 8px; right: 8px; top: 11px; height: 0; pointer-events: none; }
+.iw-ticks { position: absolute; left: 8px; right: 8px; top: 20px; height: 0; pointer-events: none; }
 .iw-ticks span { position: absolute; left: calc(var(--x) * 100%); top: 0; transform: translateX(-50%); text-align: center; }
 /* the end labels hang outside the track ends, so Unlock (near the start) never collides */
-.iw-tl { padding: 0 52px 17px 50px; }
+.iw-tl { padding: 9px 52px 17px 50px; }
 .iw-ticks { left: 58px; right: 60px; }
 .iw-ticks span:first-child { transform: translateX(-100%); text-align: right; }
 .iw-ticks span:last-child { transform: none; text-align: left; }
@@ -65,7 +81,7 @@ html, body { background: var(--iw-bg); }
   font-variant-caps: normal; font-variant-numeric: tabular-nums; }
 .iw-spd button:hover { color: var(--iw-fg); }
 .iw-spd button.on { background: #c9a24b; color: #111; font-weight: 600; }
-.iw-sec { font-size: 15px; color: var(--iw-dim); font-variant-numeric: tabular-nums; font-variant-caps: normal; white-space: nowrap; min-width: 6.6em; text-align: right; }
+.iw-sec { font-size: 15px; color: var(--iw-dim); font-variant-numeric: tabular-nums; font-variant-caps: normal; white-space: nowrap; min-width: 8.6em; text-align: right; }
 .iw-ctl label { font-size: 17px; color: var(--iw-brass); letter-spacing: 0.2em; }
 .iw-ctl output { font-size: 17px; width: 3.2em; text-align: right; color: var(--iw-dim); font-variant-numeric: tabular-nums; }
 .iw-range { flex: 1; -webkit-appearance: none; appearance: none; height: 22px; background: transparent; margin: 0; }
@@ -125,11 +141,13 @@ html, body { background: var(--iw-bg); }
   .iw-more svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
   .iw-cyc.open .iw-more svg { transform: rotate(180deg); }
   .iw-cyc:not(.open) { flex-wrap: nowrap; gap: 8px; }
-  .iw-cyc:not(.open) :is(label, .iw-spd, .iw-ticks, [data-a="prev"], [data-a="next"]) { display: none; }
+  .iw-cyc:not(.open) :is(label, .iw-spd, .iw-ticks, .iw-segl, .iw-cb) { display: none; }
+  .iw-seg button { font-size: 12px; padding: 4px 7px; letter-spacing: 0.1em; }
+  .iw-cyc:not(.open) > .iw-tl { order: 0; flex-basis: auto; }
   .iw-cyc:not(.open) .iw-tl { padding: 0; }
   .iw-cyc:not(.open) .iw-sec { min-width: 0; margin-left: 0; }
   .iw-cyc.open .iw-tl { order: 5; flex-basis: 100%; padding: 0 0 17px; }
-  .iw-cyc.open .iw-ticks { left: 8px; right: 8px; }
+  .iw-cyc.open :is(.iw-ticks, .iw-segl) { left: 8px; right: 8px; }
   .iw-cyc.open .iw-ticks span:not(.on) b { visibility: hidden; }
   .iw-sec { margin-left: auto; font-size: 13px; }
   .iw-ctl { padding: 2px 6px 2px 14px; }

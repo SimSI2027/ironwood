@@ -13,7 +13,7 @@ import {buildTrigger} from './trigger.js';
 import {buildStock} from './stock.js';
 import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN, blend} from './tour.js';
-import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, tickAt, FULL_S, FIRE_END, pumpC, tOfC} from './cycle.js';
+import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, FIRE_TICKS, tickAt, FULL_S, FIRE_END, pumpC, tOfC} from './cycle.js';
 import {createFireFX, recoilAt, RECOIL, shotX} from './fire.js';
 import {MAG_Y, MUZZLE} from './barrel.js';
 import {PUMP} from './forend.js';
@@ -109,7 +109,8 @@ async function main() {
   const [lLine, lDot, lHalo] = lead.children;
   const card = el('div', 'iw-card', '<div class="nm"></div><div class="as"></div>', ui);
   const dock = el('div', 'iw-dock', null, ui);
-  // CYCLE panel: scrubber for c with 6 labelled ticks, play/pause, step, speeds, seconds readout
+  // CYCLE panel: FIRE / PUMP / FULL, frame step and play, speeds, readout; one scrubber split into the
+  // FIRE and PUMP segments (the active one takes 70% of the track and shows its tick labels)
   const ico = {
     prev: '<svg viewBox="0 0 16 16"><rect x="3" y="3" width="1.8" height="10"/><path d="M13 3 6 8l7 5z"/></svg>',
     play: '<svg viewBox="0 0 16 16"><path class="pl" d="M5 2.8 13.2 8 5 13.2z"/><path class="pa" d="M4.2 3h2.6v10H4.2zM9.2 3h2.6v10H9.2z"/></svg>',
@@ -118,12 +119,13 @@ async function main() {
   const cycEl = el(
     'div',
     'iw-cyc',
-    `<label>Cycle</label><div class="iw-cb"><button class="iw-ib" data-a="prev" aria-label="Step back">${ico.prev}</button>` +
-      `<button class="iw-ib iw-play" data-a="play" aria-label="Play">${ico.play}</button><button class="iw-ib" data-a="next" aria-label="Step forward">${ico.next}</button></div>` +
-      `<div class="iw-tl"><input class="iw-range" type="range" min="0" max="1" step="0.001" value="0" aria-label="Cycle position"><div class="iw-ticks">` +
-      TICKS.map((k) => `<span style="--x:${k.t}"><i></i><b>${k.name}</b></span>`).join('') +
-      `</div></div><div class="iw-spd"><button data-s="1">1x</button><button data-s="0.25" class="on">0.25x</button><button data-s="0.1">0.1x</button></div>` +
-      `<output class="iw-sec">0.00 s</output>` +
+    `<label>Cycle</label><div class="iw-seg"><button data-g="fire">Fire</button><button data-g="pump">Pump</button><button data-g="full">Full</button></div>` +
+      `<div class="iw-cb"><button class="iw-ib" data-a="prev" aria-label="Back one frame">${ico.prev}</button>` +
+      `<button class="iw-ib iw-play" data-a="play" aria-label="Play">${ico.play}</button><button class="iw-ib" data-a="next" aria-label="Forward one frame">${ico.next}</button></div>` +
+      `<div class="iw-tl"><div class="iw-segl"><b>Fire</b><b>Pump</b></div><input class="iw-range" type="range" min="0" max="1" step="0.0005" value="0" aria-label="Clock position"><div class="iw-ticks">` +
+      TICKS.map((k) => `<span><i></i><b>${k.name}</b></span>`).join('') +
+      `</div></div><div class="iw-spd"><button data-s="1">1x</button><button data-s="0.25" class="on">0.25x</button><button data-s="0.1">0.1x</button><button data-s="0.05">0.05x</button></div>` +
+      `<output class="iw-sec">0.000 s · f 0</output>` +
       `<button class="iw-ib iw-more" aria-label="More cycle controls" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M3 6l5 5 5-5"/></svg></button>`,
     dock,
   );
@@ -133,6 +135,36 @@ async function main() {
   const cOut = cycEl.querySelector('.iw-sec');
   const cPlay = cycEl.querySelector('.iw-play');
   const tickEls = [...cycEl.querySelectorAll('.iw-ticks span')];
+  const segL = cycEl.querySelector('.iw-segl');
+  const segBtns = [...cycEl.querySelectorAll('.iw-seg button')];
+  const spdBtns = [...cycEl.querySelectorAll('.iw-spd button')];
+  // scrubber mapping: the FIRE segment takes w of the track, PUMP the rest
+  const NF = FULL_S * 240; // frames at 240 fps over the whole clock
+  const seg = {w: 0.7, drag: false, key: ''};
+  const tToV = (t) => (t < FIRE_END ? (seg.w * t) / FIRE_END : seg.w + ((1 - seg.w) * (t - FIRE_END)) / (1 - FIRE_END));
+  const vToT = (v) => (v < seg.w ? (FIRE_END * v) / seg.w : FIRE_END + ((1 - FIRE_END) * (v - seg.w)) / (1 - seg.w));
+  cRange.addEventListener('pointerdown', () => (seg.drag = true));
+  addEventListener('pointerup', () => (seg.drag = false));
+  /** Place the ticks for the current split; labels only for the active segment, never overlapping (the active tick wins). */
+  function layoutTicks(ti) {
+    const fire = st.t < FIRE_END;
+    const W = tickEls[0].parentNode.offsetWidth;
+    segL.style.setProperty('--w', seg.w);
+    const placed = [];
+    const order = tickEls.map((e, i) => i).sort((a, b) => (a === ti ? -1 : b === ti ? 1 : a - b));
+    for (const i of order) {
+      const e = tickEls[i];
+      const x = tToV(TICKS[i].t);
+      e.style.setProperty('--x', x);
+      const mine = i < FIRE_TICKS.length === fire;
+      const bw = e.lastChild.offsetWidth;
+      const c = x * W;
+      const l = i === 0 ? c - bw - 10 : i === TICKS.length - 1 ? c + 10 : c - bw / 2;
+      const ok = mine && !placed.some(([a, b]) => l < b + 8 && l + bw > a - 8);
+      if (ok) placed.push([l, l + bw]);
+      e.classList.toggle('hid', !ok);
+    }
+  }
   const ctl = el('div', 'iw-ctl', '<label>Explode</label>', dock);
   const range = el('input', 'iw-range', null, ctl);
   Object.assign(range, {type: 'range', min: 0, max: 1, step: 0.001, value: 0});
@@ -345,7 +377,7 @@ async function main() {
   });
   // --- drag the forend along the barrel axis to drive the cycle: pulling back runs c 0 -> 0.5,
   // pushing forward 0.5 -> 1. Pointer-down on it disables orbit until release.
-  const cyc = {playing: false, speed: 0.25, tw: null};
+  const cyc = {playing: false, speed: 0.25, tw: null, stop: 1, mode: ''};
   let drag = null;
   const canDrag = (h) => h && h.userData.asm === 'forend' && st.explode < 0.05 && !tour.active;
   app.addEventListener(
@@ -414,8 +446,21 @@ async function main() {
     engage();
     cyc.playing = false;
     cyc.tw = null;
-    st.t = Number(cRange.value);
+    st.t = vToT(Number(cRange.value));
   });
+  const setSpeed = (s) => ((cyc.speed = s), spdBtns.forEach((k) => k.classList.toggle('on', Number(k.dataset.s) === s)));
+  // FIRE: 0 -> 0.30 at 0.1x · PUMP: 0.30 -> 1 (ejects spent only if FIRE ran) · FULL: 0 -> 1
+  cycEl.querySelector('.iw-seg').onclick = (e) => {
+    const g = e.target.closest('button')?.dataset.g;
+    if (!g) return;
+    engage();
+    cyc.tw = null;
+    cyc.playing = true;
+    cyc.mode = g;
+    if (g === 'fire') (st.t = 0), (cyc.stop = FIRE_END), setSpeed(0.1);
+    else if (g === 'pump') (st.t = FIRE_END), (cyc.stop = 1), setSpeed(0.25);
+    else (st.t = 0), (cyc.stop = 1), setSpeed(0.25);
+  };
   const stepTo = (to, from = st.t) => (cyc.tw = {from, to, t0: performance.now(), dur: 450});
   cycEl.querySelector('.iw-cb').onclick = (e) => {
     const a = e.target.closest('button')?.dataset.a;
@@ -424,23 +469,17 @@ async function main() {
     if (a === 'play') {
       cyc.tw = null;
       cyc.playing = !cyc.playing;
-      if (cyc.playing && st.t >= 0.999) st.t = 0;
+      if (cyc.playing && st.t >= cyc.stop - 1e-4) st.t = cyc.stop === FIRE_END ? 0 : 0;
       return;
     }
+    // frame step: 1/240 s of the clock at 1x, on the frame grid
     cyc.playing = false;
-    if (a === 'next') {
-      const n = TICKS.find((k) => k.t > st.t + 1e-3);
-      n ? stepTo(n.t) : stepTo(TICKS[1].t, 0); // from Locked, round to the next cycle
-    } else {
-      const pv = [...TICKS].reverse().find((k) => k.t < st.t - 1e-3);
-      pv ? stepTo(pv.t) : stepTo(TICKS[TICKS.length - 2].t, 1);
-    }
+    cyc.tw = null;
+    st.t = clamp01((Math.round(st.t * NF) + (a === 'next' ? 1 : -1)) / NF);
   };
   cycEl.querySelector('.iw-spd').onclick = (e) => {
     const b = e.target.closest('button');
-    if (!b) return;
-    cyc.speed = Number(b.dataset.s);
-    [...b.parentNode.children].forEach((k) => k.classList.toggle('on', k === b));
+    if (b) setSpeed(Number(b.dataset.s));
   };
   const partByName = (n) =>
     n === 'shell' ? shells.fresh : n === 'chambered' || n === 'ejected' ? shells.chambered() : n === 'shot column' ? fx.shot : asms.flatMap((a) => a.parts).find((p) => p.name === n)?.obj;
@@ -575,7 +614,10 @@ async function main() {
         if (t >= 1) cyc.tw = null;
       } else if (cyc.playing) {
         st.t += (dt * cyc.speed) / FULL_S;
-        if (st.t >= 1) {
+        if (cyc.stop === FIRE_END && st.t >= FIRE_END) {
+          st.t = FIRE_END; // FIRE holds at the end of the recoil, ready to pump
+          cyc.playing = false;
+        } else if (st.t >= 1) {
           st.t = 0;
           dir = null; // the camera stays at the port
           cyc.playing = false;
@@ -585,13 +627,19 @@ async function main() {
     // cycle panel readout; x-ray the receiver while the cycle is off closed
     // fired: the last pass through FIRE got past the strike (a pump then ejects a spent shell)
     if (st.t < FIRE_END) st.fired = st.t >= 0.11;
-    cRange.value = st.t;
-    cRange.style.setProperty('--p', `${(st.t * 100).toFixed(1)}%`);
-    cOut.value = `${(st.t * FULL_S).toFixed(2)} / ${FULL_S.toFixed(2)} s`;
+    if (!seg.drag) seg.w += ((st.t < FIRE_END ? 0.7 : 0.3) - seg.w) * (still ? 1 : 1 - Math.exp(-dt * 10));
+    const v = tToV(st.t);
+    cRange.value = v;
+    cRange.style.setProperty('--p', `${(v * 100).toFixed(1)}%`);
+    cOut.value = `${(st.t * FULL_S).toFixed(3)} s · f ${Math.round(st.t * NF)}`;
+    segBtns.forEach((b) => b.classList.toggle('on', cyc.playing && b.dataset.g === cyc.mode));
     cPlay.classList.toggle('on', cyc.playing);
     const active = st.t > 0.0005 && st.explode < 0.05;
     const ti = tickAt(st.t);
     if (ti !== lastTick) tickEls.forEach((e, i) => e.classList.toggle('on', i === ti));
+    const lk = `${ti}|${seg.w.toFixed(3)}|${S.size.w}`;
+    if (lk !== seg.key) layoutTicks(ti);
+    seg.key = lk;
     lastTick = ti;
     xg += ((active ? 1 : 0) - xg) * (still ? 1 : 1 - Math.exp(-dt * 7));
     const xt = xrayAt(st.t);
