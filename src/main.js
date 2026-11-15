@@ -15,7 +15,7 @@ import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN, blend} from './tour.js';
 import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, FIRE_TICKS, tickAt, FULL_S, FIRE_END, pumpC, tOfC} from './cycle.js';
 import {createFireFX, recoilAt, RECOIL, shotX} from './fire.js';
-import {MAG_Y, MUZZLE} from './barrel.js';
+import {MAG_Y} from './barrel.js';
 import {PUMP} from './forend.js';
 
 const q = new URLSearchParams(location.search);
@@ -299,7 +299,14 @@ async function main() {
       return {t, p: t.clone().addScaledVector(d.normalize(), h / k)};
     };
     const track = (x) => at(x, 0, 0, new THREE.Vector3(-0.35, 0.32, 1), 10);
-    const port = at(-11, -13, 12, new THREE.Vector3(0.3, 0.5, 1), 27); // the port and the landing spot
+    // the port and the ejected shell's whole envelope (apex 12 cm up, landing and roll on the floor),
+    // framed into the free band between the header and the dock
+    const env = new THREE.Mesh(new THREE.BoxGeometry(18, 45, 38));
+    env.position.set(-11, -10, 18.5);
+    gun.add(env);
+    const port = frame(env, new THREE.Vector3(0.3, 0.5, 1), 1.0, false);
+    env.removeFromParent();
+    env.geometry.dispose();
     gun.position.copy(gp);
     gun.rotation.z = gr;
     poseAll(st.explode, channelsAt(st.t, st.fired));
@@ -309,8 +316,8 @@ async function main() {
     if (fresh || !ckeys) ckeys = clockKeys();
     const K = ckeys;
     if (t < 0.11) return blend(K.wide, K.trig, smr(0, 0.03, t));
-    if (t < 0.21) return blend(K.trig, K.track(t < 0.15 ? 3 : shotX(t)), smr(0.11, 0.14, t));
-    if (t < 0.3) return blend(K.track(MUZZLE), K.wide, smr(0.21, 0.25, t));
+    if (t < 0.204) return blend(K.trig, K.track(t < 0.15 ? 3 : shotX(t)), smr(0.11, 0.14, t));
+    if (t < 0.3) return blend(K.track(shotX(Math.min(t, 0.21))), K.wide, smr(0.204, 0.222, t)); // pulls wide through the flash
     return blend(K.wide, K.port, smr(0.3, 0.4, t));
   }
   const direct = () => !dir && (dir = {from: null, t0: 0});

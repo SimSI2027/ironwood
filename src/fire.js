@@ -80,20 +80,20 @@ export function createFireFX() {
   shot.add(new THREE.Mesh(merge(pl), shotMat), new THREE.Mesh(wadG, wadMat));
   shot.traverse((o) => o.isMesh && (o.userData.partRoot = shot));
 
-  // muzzle flash: hot core, forward cone, five petals; the light lasts 0.1 s
+  // muzzle flash: soft additive sprites only (no hard edges): a hot core, a forward plume of four
+  // shrinking puffs and five small petals around the crown; the light lasts 0.1 s
   const flash = add(new THREE.Group());
   flash.position.x = MUZZLE + 0.2;
-  const core = new THREE.Sprite(additive(hot, 0xffe2b0));
-  flash.add(core);
-  const coneMat = new THREE.MeshBasicMaterial({color: 0xff9a3a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide});
-  const cone = new THREE.ConeGeometry(1, 1, 24, 1, true).rotateZ(Math.PI / 2).translate(0.5, 0, 0);
-  flash.add(new THREE.Mesh(cone, coneMat));
+  const FL = [[0, 0, 0, 4.0, 0.95, 0xffe8c0], [1.6, 0, 0, 3.4, 0.6, 0xffb060], [3.4, 0, 0, 2.8, 0.5, 0xff9a40], [5.4, 0, 0, 2.0, 0.4, 0xff8a30], [7.2, 0, 0, 1.3, 0.3, 0xff7a20]];
   for (let k = 0; k < 5; k++) {
-    const m = new THREE.Mesh(cone, coneMat);
-    m.rotation.x = (k / 5) * Math.PI * 2;
-    m.rotateZ(0.95);
-    m.scale.setScalar(0.4);
-    flash.add(m);
+    const a = (k / 5) * Math.PI * 2 + 0.3;
+    FL.push([0.5, Math.cos(a) * 1.5, Math.sin(a) * 1.5, 1.3, 0.45, 0xffb060]);
+  }
+  for (const [x, y, z, sc, op, col] of FL) {
+    const sp = new THREE.Sprite(additive(hot, col));
+    sp.position.set(x, y, z);
+    sp.userData = {sc, op};
+    flash.add(sp);
   }
   const light = new THREE.PointLight(0xffa24a, 0, 0, 2);
   light.position.set(MUZZLE + 3, 1, 0);
@@ -131,14 +131,13 @@ export function createFireFX() {
     flash.visible = uf > 0 && uf < 1;
     if (flash.visible) {
       const e = Math.min(1, uf / 0.12) * (1 - sm((uf - 0.12) / 0.88));
-      core.scale.setScalar(9 * e + 1);
-      core.material.opacity = e;
-      coneMat.opacity = 0.85 * e;
-      flash.children[1].scale.set(14 * e, 3.2 * e + 0.1, 3.2 * e + 0.1);
-      for (let k = 2; k < flash.children.length; k++) flash.children[k].scale.setScalar(3.5 * e + 0.05);
+      for (const sp of flash.children) {
+        sp.scale.setScalar(sp.userData.sc * (0.35 + 0.65 * e));
+        sp.material.opacity = sp.userData.op * e;
+      }
     }
     const ul = (t - 0.21) / LIGHT_T;
-    if (ul > 0 && ul < 1) light.intensity = 3.2e4 * Math.min(1, ul / 0.08) * (1 - ul) ** 2;
+    if (ul > 0 && ul < 1) light.intensity = 1.1e4 * Math.min(1, ul / 0.08) * (1 - ul) ** 2;
     // shot cloud: leaves the muzzle at 0.21, 2.6 m out by 0.26
     const uc = (t - 0.21) / 0.05;
     cloud.visible = uc > 0 && uc < 1;
