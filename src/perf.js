@@ -56,7 +56,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
   const avg = (a) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0);
   let prev = 0;
   let shown = 0;
-  const P = (window.__PERF = {renderer: gpu, timer: !!ext, marks, pass: {}, gpuMs: 0, frameMs: 0, calls: 0, tris: 0, size: ''});
+  const P = (window.__PERF = {reset: () => (Object.keys(hist).forEach((k) => delete hist[k]), (cpu.length = 0), (prev = 0)), renderer: gpu, timer: !!ext, marks, pass: {}, gpuMs: 0, frameMs: 0, calls: 0, tris: 0, size: ''});
   function poll() {
     while (pending.length) {
       const f = pending[0];
@@ -97,6 +97,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
       P.drawnPerS = drawn.length;
       P.size = `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`;
       P.tier = S.tier;
+      P.cut = Object.keys(S.cut).join('+') || 'none';
       const ms = (v) => (v == null ? '-' : v.toFixed(0)).padStart(6) + ' ms';
       box.textContent =
         `IRONWOOD perf · ${S.tier} · ${P.size}\n` +

@@ -146,6 +146,11 @@ export function createStage(canvas) {
       },
     });
   floorR.material.transparent = true;
+  // adaptive quality can stop the reflection render; the floor itself (base, pool, contact shadow) stays
+  const reflect = floorR.onBeforeRender;
+  floorR.onBeforeRender = function (...a) {
+    if (!S.cut.reflection) reflect.apply(this, a);
+  };
   floorR.renderOrder = -2;
   floorR.rotation.x = -Math.PI / 2;
   floorR.position.y = FLOOR_Y;
@@ -197,7 +202,7 @@ export function createStage(canvas) {
   const resize = () => {
     const w = canvas.clientWidth || innerWidth;
     const h = canvas.clientHeight || innerHeight;
-    const pr = Math.min(devicePixelRatio || 1, S.tier === 'low' ? 1.5 : 2);
+    const pr = S.cut.dpr ? 1 : Math.min(devicePixelRatio || 1, S.tier === 'low' ? 1.5 : 2);
     hullMat.uniforms.uK.value = (1.8 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h; // ~1.8 px
     size.w = w;
     size.h = h;
@@ -264,7 +269,28 @@ export function createStage(canvas) {
     resize();
     select(sel);
   };
-  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, key, floor: floorR, tier: 'high'};
+  /**
+   * Adaptive quality: one step down per call, never back up: SSAO off, then the floor reflection off,
+   * then DPR 1. Steps that change nothing here (no SSAO on low, DPR already 1) are skipped.
+   * Returns the step taken, or null when none is left.
+   */
+  const degrade = () => {
+    const steps = [
+      ['ssao', () => S.tier === 'high' && ao.enabled, () => (ao.enabled = false)],
+      ['reflection', () => floorR.visible, () => (floorR.material.uniforms.uStrength.value = 0)],
+      ['dpr', () => renderer.getPixelRatio() > 1, () => 0],
+    ];
+    for (const [k, live, off] of steps) {
+      if (S.cut[k]) continue;
+      S.cut[k] = true;
+      if (!live()) continue;
+      off();
+      resize();
+      return k;
+    }
+    return null;
+  };
+  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, key, floor: floorR, cut: {}, tier: 'high'};
   S.render = () => (S.tier === 'high' ? composer.render() : renderer.render(scene, camera));
   return S;
 }

@@ -102,7 +102,8 @@ async function main() {
   const qSeg = el('span', 'iw-q', '<button data-t="high">High</button><button data-t="low">Low</button>', head);
   el('div', 'iw-rule', null, ui);
   const hint = el('div', 'iw-hint', null, ui);
-  const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${S.tier} quality`);
+  const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${S.tier} quality${dropped.map((k) => ' · ' + k).join('')} · ${gpuName}`);
+  const dropped = []; // adaptive quality steps taken this visit
 
   // --- quality tier: ?q=high|low forces it; then a remembered header choice; then a discrete GPU
   // (WebGL renderer string) starts high; else phones start low and the rest run a 1 s probe of the
@@ -116,6 +117,8 @@ async function main() {
   const gl = S.renderer.getContext();
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   const gpu = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
+  // the header stats line shows the GPU: the model inside ANGLE's string, else the raw string
+  const gpuName = (/^ANGLE \([^,]+, (.+?)(?: \(0x[0-9a-f]+\))?(?: Direct3D.*| OpenGL.*| Vulkan.*)?, [^,]+\)$/i.exec(gpu)?.[1] || gpu).trim();
   const discrete = /nvidia|geforce|quadro|rtx|gtx|radeon\s*(rx|pro|r9|vii)|arc\(tm\)\s*a\d|intel.*\barc\b/i.test(gpu);
   const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
   const pre = forced || stored || (discrete ? 'high' : phone ? 'low' : null);
@@ -632,12 +635,19 @@ async function main() {
   let lastSig = null;
   let lastCam = null;
   let turning = false;
+  // adaptive quality: a mean frame time over 20 ms across 1 s of consecutive drawn frames (never the
+  // 30 fps turn; rAF alternates 17/33 ms under load, so no single frame decides) drops one step
+  // (SSAO, reflection, DPR 1); it never steps back up in this visit
+  let drewLast = false;
+  let lastDraw = 0;
+  const slow = []; // [t, ms] of consecutive drawn frames, last second
+  const STEP = {ssao: 'no SSAO', reflection: 'no reflection', dpr: 'DPR 1'};
   const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, S.tier === 'high' ? 1 : 0, hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
   const camOf = () => [...camera.position.toArray(), ...camera.quaternion.toArray(), camera.aspect];
   const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {
     const raw = now - prev;
-    if (turning && controls.autoRotate && raw < 30 && !still) return requestAnimationFrame(tick);
+    if (turning && controls.autoRotate && raw < 30 && !still) return (drewLast = false), requestAnimationFrame(tick);
     const dt = Math.min(0.05, raw / 1000);
     prev = now;
     if (probe) {
@@ -779,7 +789,7 @@ async function main() {
     const draw = moved || camMoved || still || !!probe || S.renderer.shadowMap.needsUpdate;
     turning = !moved && camMoved && controls.autoRotate;
     pickDirty = draw;
-    if (!draw) return requestAnimationFrame(tick);
+    if (!draw) return (drewLast = false), requestAnimationFrame(tick);
     lastSig = sg;
     lastCam = cm;
     perf?.frameStart();
@@ -789,6 +799,17 @@ async function main() {
       gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
       probe.dts.push(performance.now() - t0);
     } else S.render();
+    if (drewLast && !probe && !still && window.__READY) {
+      slow.push([now, now - lastDraw]);
+      while (slow[0][0] < now - 1000) slow.shift();
+      if (now - slow[0][0] > 900 && slow.reduce((a, f) => a + f[1], 0) / slow.length > 20) {
+        const k = S.degrade();
+        if (k) dropped.push(STEP[k]), setHint();
+        slow.length = 0;
+      }
+    } else slow.length = 0;
+    drewLast = true;
+    lastDraw = now;
     if (!window.__READY) {
       if (perf) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // first frame = the GPU finished it
       MARKS.shaders ??= performance.now(); // until compileAsync, the shaders compile inside the first frame
