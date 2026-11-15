@@ -32,6 +32,20 @@ if (TAP != null) {
   await page.waitForTimeout(700);
   console.log('tap', JSON.stringify(p), 'card', await page.evaluate(() => document.querySelector('.iw-card').className + ' ' + document.querySelector('.iw-card .nm').textContent));
 }
+// SHOT_HOVER=<assembly index> moves the mouse onto the centre of that assembly's first part
+if (process.env.SHOT_HOVER != null) {
+  const p = await page.evaluate((i) => {
+    const {asms, camera} = window.IRONWOOD;
+    let m = null;
+    asms[i].parts[0].obj.traverse((o) => o.isMesh && !m && (m = o));
+    m.geometry.computeBoundingSphere();
+    const v = m.localToWorld(m.geometry.boundingSphere.center.clone()).project(camera);
+    return {x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight};
+  }, Number(process.env.SHOT_HOVER));
+  await page.mouse.move(p.x, p.y);
+  await page.waitForTimeout(700);
+  console.log('hover', JSON.stringify(p), 'card', await page.evaluate(() => document.querySelector('.iw-card').className + ' ' + document.querySelector('.iw-card .nm').textContent));
+}
 const stats = await page.evaluate(() => ({...window.__STATS, probe: window.__PROBE}));
 console.log('stats', JSON.stringify(stats));
 console.log('errors', errs.length ? errs.slice(0, 12).join('\n') : 'none');

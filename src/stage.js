@@ -23,6 +23,9 @@ const Vignette = {
     uniform sampler2D tDiffuse; uniform float uAmount; uniform float uAspect; varying vec2 vUv;
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
+      // half-float overflow (Inf) on the sharpest speculars would tone-map to black specks
+      if (any(isnan(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+      c.rgb = min(c.rgb, vec3(64.0));
       vec2 d = (vUv - 0.5) * vec2(uAspect, 1.0);
       float r = length(d) / length(vec2(uAspect, 1.0) * 0.5);
       c.rgb *= 1.0 - uAmount * smoothstep(0.35, 1.05, r);
@@ -37,6 +40,10 @@ const BRASS_HIGHPASS = `
   uniform float luminosityThreshold; uniform float smoothWidth; varying vec2 vUv;
   void main(){
     vec4 t = texture2D(tDiffuse, vUv);
+    // a few NaN/Inf pixels in the HDR buffer are invisible on their own, but the blur would
+    // smear them over the whole frame: drop them here
+    if (any(isnan(t)) || any(isinf(t))) t = vec4(0.0);
+    t.rgb = min(t.rgb, vec3(32.0));
     float l = dot(t.rgb, vec3(0.299, 0.587, 0.114));
     float warm = smoothstep(0.5, 0.8, (t.r - t.b) / max(t.r, 1e-4));
     float a = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, l) * warm;

@@ -351,7 +351,7 @@ async function main() {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, startTour, TOUR_LEN, floor: FLOOR_Y, camera};
+  window.IRONWOOD = {asms, gun, st, focusOn, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S};
 }
 
 main().catch((e) => {
