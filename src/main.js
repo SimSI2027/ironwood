@@ -169,7 +169,7 @@ async function main() {
   ui.appendChild(lead);
   const [lLine, lDot, lHalo] = lead.children;
   const card = el('div', 'iw-card', '<div class="nm"></div><div class="as"></div>', ui);
-  // exploded view (explode >= 0.9): one label per assembly, hairline brass leaders
+  // exploded view (explode 0.5 to 0.8 fades them in): one label per assembly, hairline brass leaders
   const lab = {svg: document.createElementNS('http://www.w3.org/2000/svg', 'svg'), els: [], key: ''};
   lab.svg.setAttribute('class', 'iw-lead iw-labl');
   ui.appendChild(lab.svg);
@@ -1053,7 +1053,7 @@ async function main() {
       a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr[i] < 0.004 ? 0 : xr[i]);
     });
     S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
-    const fl = 1 + 0.3 * smr(0.8, 0.9, st.explode); // exploded view: fill lights up 30% so dark parts lift off the background
+    const fl = 1 + 0.3 * smr(0.5, 0.8, st.explode); // exploded view: fill lights up 30% so dark parts lift off the background
     S.cool.intensity = 0.25 * S.key.intensity * fl; // the cool fill keeps 25% of the key
     S.fill.intensity = 0.35 * fl;
     S.under.intensity = 0.35 * fl;
@@ -1119,7 +1119,7 @@ async function main() {
     S.outline.edgeStrength = 4.5 * stepT(hvT, now);
     lead.classList.toggle('show', !!hovered);
     if (hovered) drawLeader();
-    const lv = tour.active ? 0 : smr(0.88, 0.96, st.explode);
+    const lv = tour.active ? 0 : smr(0.5, 0.8, st.explode);
     lab.svg.style.opacity = lv;
     lab.els.forEach((e) => (e.style.opacity = lv));
     if (lv > 0) placeLabels();
@@ -1233,7 +1233,7 @@ async function main() {
       S.floor.position.y = FLOOR_Y + (FLOOR_LOW - FLOOR_Y) * smr(0.3, 0.75, e);
       const xt = xrayAt(t);
       asms.forEach((a, i) => a.setLook(0, 0, x * (xt[a.key] || 0)));
-      const fl = 1 + 0.3 * smr(0.8, 0.9, e);
+      const fl = 1 + 0.3 * smr(0.5, 0.8, e);
       S.key.intensity = 3.0;
       S.cool.intensity = 0.75 * fl;
       S.fill.intensity = 0.35 * fl;
