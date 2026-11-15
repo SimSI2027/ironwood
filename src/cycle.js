@@ -234,43 +234,87 @@ export function createShells() {
       m.opacity = a;
       m.depthWrite = !t;
     });
-  // ejected shell: the bolt carries it back (7.5 cm), then it slides sideways out of the port with no
-  // yaw (the port is 10.9 cm long, the hull 6.6), dropping 3 mm to the port's mid-height, and only
-  // tumbles once it is outside the wall at z 1.55. Lands at T1.
-  const T0 = 0.425;
-  const T1 = 0.55;
-  const yPort = -0.3; // port spans y -1.35..0.75
-  const yLand = FLOOR_Y + 1.0; // lying on its side, gun group sits at y 0
-  const peak = 1.6; // height of the flat kick above the port line
-  const dy = yLand - yPort;
-  const gk = 2 * peak - dy + 2 * Math.sqrt(peak * (peak - dy));
-  const vk = dy + gk;
-  const zLand = 21;
+  // ejected shell, a pure function of pump c over its segment (0.425-0.92), no stepped keys:
+  //  ride    c < 0.425       the bolt carries it back (base on the bolt face)
+  //  kick    0.425-0.437     drops onto the port sill (bottom at y -1.35) and slides until its right
+  //                          rim touches the wall plane z 1.55
+  //  pivot   0.437-0.47      yaws mouth-out about that rim point on the sill edge, accelerating to
+  //                          the flight's spin rate (87 deg); every point stays inside the port's x/y
+  //  flight  0.47-0.64       30 cm across, 12 cm up, down to the floor: position linear across,
+  //                          parabola up; 2.5 spins and one slow tumble, both linear in time
+  //  bounce  0.64-0.69 (3 cm) · roll 0.69-0.77 (4 cm, on its side) · settle · fade 0.80-0.92
+  const SILL = -1.35;
+  const WALL = 1.55;
+  const R_SH = 0.93; // hull radius
+  const C_K = 0.425;
+  const C_P = 0.437;
+  const C_F = 0.47;
+  const C_L = 0.64;
+  const C_B = 0.69;
+  const C_R = 0.77;
+  const SPIN = 5 * Math.PI; // 2.5 turns in flight
+  const TH1 = (SPIN * (C_F - C_P)) / (C_L - C_F) / 2; // pivot end angle: its end rate = the spin rate
+  const yPort = SILL + R_SH;
+  const yLand = FLOOR_Y + 1.0; // on its side on the floor (brass rim radius 1.0); the gun sits at y 0
+  const RANGE = 30;
+  const PEAK = 12;
+  const dH = new THREE.Vector3(-0.3, 0, 1).normalize(); // out of the port, a little rearward
   const euler = new THREE.Euler(0, 0, 0, 'YZX');
+  const v3 = new THREE.Vector3();
+  /** Shell centre for a yaw psi about the rim point Q = (xb, yPort, WALL). */
+  const aboutRim = (xb, L, psi, out) =>
+    out.set(xb + (L / 2) * Math.cos(psi) - R_SH * Math.sin(psi), yPort, WALL - (L / 2) * Math.sin(psi) - R_SH * Math.cos(psi));
   function poseEject(s, c) {
     const L = s.userData.len;
-    const xLand = face(T0) + L / 2 - 7;
-    s.visible = true;
-    setOpacity(s, 1);
-    s.rotation.set(0, 0, 0);
-    if (c < T0) return s.position.set(face(c) + L / 2, 0, 0);
-    if (c >= 0.74) return (s.visible = false);
-    const u = clamp01((c - T0) / (T1 - T0));
-    const a = clamp01((u - 0.1) / 0.9);
-    const w = sm((u - 0.12) / 0.88);
-    euler.set(9 * w, -1.1 * w, 3 * Math.PI * w ** 1.6);
-    if (c < T1) {
-      const y = u < 0.1 ? yPort * sm(u / 0.05) : yPort + vk * a - gk * a * a;
-      const x0 = face(c) + L / 2;
-      s.position.set(x0 + (xLand - x0) * u * u, y, zLand * u * (2 - u));
-    } else {
-      const v = (c - T1) / 0.22;
-      const b = Math.max(0, Math.sin(Math.min(1, v / 0.25) * Math.PI)) * 1.1 * (1 - v);
-      s.position.set(xLand - 1.2 * sm(v * 2), yLand + b, zLand + 2.4 * sm(v * 2));
-      euler.x = 9 + 2.6 * sm(v * 2);
+    const xb = face(C_K);
+    s.visible = c < 0.92;
+    if (!s.visible) return;
+    setOpacity(s, 1 - sm((c - 0.8) / 0.12));
+    if (c < C_K) {
+      s.rotation.set(0, 0, 0);
+      return s.position.set(face(c) + L / 2, 0, 0);
     }
+    if (c < C_P) {
+      const k = sm((c - C_K) / (C_P - C_K));
+      s.rotation.set(0, 0, 0);
+      return s.position.set(xb + L / 2, yPort * k, (WALL - R_SH) * k);
+    }
+    if (c < C_F) {
+      const psi = -TH1 * ((c - C_P) / (C_F - C_P)) ** 2;
+      s.rotation.set(0, psi, 0);
+      return aboutRim(xb, L, psi, s.position);
+    }
+    const psi0 = -TH1;
+    const p0 = aboutRim(xb, L, psi0, v3);
+    // parabola through the release (y0), 12 cm over it, landing on the floor at tau 1
+    const d = yLand - p0.y;
+    const B = 2 * PEAK + 2 * Math.sqrt(PEAK * (PEAK - d));
+    const A = B - d;
+    if (c < C_L) {
+      const tau = (c - C_F) / (C_L - C_F);
+      s.position.set(p0.x + dH.x * RANGE * tau, p0.y + B * tau - A * tau * tau, p0.z + dH.z * RANGE * tau);
+      euler.set(0, psi0 - SPIN * tau, 2 * Math.PI * tau);
+      return s.rotation.copy(euler);
+    }
+    // on the floor: yaw frozen where it landed, axis level
+    const psiL = psi0 - SPIN;
+    const land = v3.set(p0.x + dH.x * RANGE, yLand, p0.z + dH.z * RANGE);
+    const tb = clamp01((c - C_L) / (C_B - C_L));
+    const hop = 3 * 4 * tb * (1 - tb);
+    const tr = clamp01((c - C_B) / (C_R - C_B));
+    const roll = 4 * (1 - (1 - tr) ** 2);
+    // roll direction: level and square to the shell's axis, on the side it was travelling
+    const ax = Math.cos(psiL);
+    const az = -Math.sin(psiL);
+    let px = -az;
+    let pz = ax;
+    if (px * dH.x + pz * dH.z < 0) (px = -px), (pz = -pz);
+    const slide = 2.5 * (1 - (1 - tb) ** 2); // carries on 2.5 cm through the bounce
+    s.position.set(land.x + dH.x * slide + px * roll, yLand + hop, land.z + dH.z * slide + pz * roll);
+    // rolling without slipping: about its own axis by roll / radius, sense from up x travel
+    const sense = Math.sign(pz * ax - px * az) || 1;
+    euler.set(sense * (roll / R_SH), psiL, 0);
     s.rotation.copy(euler);
-    setOpacity(s, 1 - sm((c - 0.62) / 0.12));
   }
 
   // fresh shell waypoints (base x, centre y), all clear of the tube mouth (x -0.6, top y -1.65),
