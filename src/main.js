@@ -414,7 +414,7 @@ async function main() {
   // after an orbit) or the hero / pill direction, swayed +/-20 deg about the vertical while idle (never a
   // full orbit, never end-on). follow: a cubic in-out blend from where the camera was into the live framing.
   const PILL_DIR = new THREE.Vector3(0.42, 0.34, 1);
-  const SWAY = 0;
+  const SWAY = THREE.MathUtils.degToRad(20);
   const SWAY_P = 24; // s per sway cycle
   const view = {user: false, base: null, follow: null, phase: 0, env: tween(0, 1.6)};
   const swayDir = (d, a) => d.clone().applyAxisAngle(camera.up, a);
