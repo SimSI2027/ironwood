@@ -17,6 +17,9 @@ import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, FIRE_TICKS, tickAt
 import {createFireFX, recoilAt, RECOIL, shotX} from './fire.js';
 import {MAG_Y} from './barrel.js';
 import {PUMP} from './forend.js';
+import {createPerf} from './perf.js';
+
+const MARKS = {parsed: performance.now()}; // load milestones, ms since navigation start
 
 const q = new URLSearchParams(location.search);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -60,6 +63,7 @@ async function main() {
   gun.add(shells.group);
   const fx = createFireFX();
   gun.add(fx.group);
+  MARKS.textures = performance.now();
 
   // --- UI
   const ui = el('div', 'iw', null, app);
@@ -584,11 +588,13 @@ async function main() {
   controls.update();
   if (q.has('tour')) startTour();
 
+  const perf = q.has('perf') ? createPerf(S, {gpu, marks: MARKS, floor: S.floor, parts: [...meshes, ...asms.flatMap((a) => a.edges)]}) : null;
   const still = q.has('still');
   let prev = performance.now();
   let lastE = NaN;
   let lastP = NaN;
   const tick = (now) => {
+    perf?.frameStart();
     const raw = now - prev;
     const dt = Math.min(0.05, raw / 1000);
     prev = now;
@@ -731,9 +737,13 @@ async function main() {
       probe.dts.push(performance.now() - t0);
     } else S.render();
     if (!window.__READY) {
+      if (perf) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // first frame = the GPU finished it
+      MARKS.shaders ??= performance.now(); // until compileAsync, the shaders compile inside the first frame
+      MARKS.first = performance.now();
       window.__READY = true;
       window.__STATS = {meshes: meshes.length, parts: asms.reduce((n, a) => n + a.parts.length, 0), tris: S.renderer.info.render.triangles, tier: S.tier};
     }
+    perf?.frameEnd(now);
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

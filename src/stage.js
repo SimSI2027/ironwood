@@ -261,7 +261,7 @@ export function createStage(canvas) {
     resize();
     select(sel);
   };
-  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, key, tier: 'high'};
+  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, key, floor: floorR, tier: 'high'};
   S.render = () => (S.tier === 'high' ? composer.render() : renderer.render(scene, camera));
   return S;
 }
