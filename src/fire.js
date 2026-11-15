@@ -80,14 +80,15 @@ export function createFireFX() {
   shot.add(new THREE.Mesh(merge(pl), shotMat), new THREE.Mesh(wadG, wadMat));
   shot.traverse((o) => o.isMesh && (o.userData.partRoot = shot));
 
-  // muzzle flash: soft additive sprites only (no hard edges): a hot core, a forward plume of four
-  // shrinking puffs and five small petals around the crown; the light lasts 0.1 s
+  // muzzle flash: a soft warm bloom about 15 cm long, no cone and no petals: a wide faint halo, a hot
+  // core at the crown and nine heavily overlapping glows along the bore line whose size and strength
+  // fall off smoothly, so they merge into one elongated bloom; the light lasts 0.1 s
   const flash = add(new THREE.Group());
   flash.position.x = MUZZLE + 0.2;
-  const FL = [[0, 0, 0, 4.0, 0.95, 0xffe8c0], [1.6, 0, 0, 3.4, 0.6, 0xffb060], [3.4, 0, 0, 2.8, 0.5, 0xff9a40], [5.4, 0, 0, 2.0, 0.4, 0xff8a30], [7.2, 0, 0, 1.3, 0.3, 0xff7a20]];
-  for (let k = 0; k < 5; k++) {
-    const a = (k / 5) * Math.PI * 2 + 0.3;
-    FL.push([0.5, Math.cos(a) * 1.5, Math.sin(a) * 1.5, 1.3, 0.45, 0xffb060]);
+  const FL = [[2.5, 0, 0, 9.0, 0.16, 0xff9a48], [0.3, 0, 0, 3.6, 0.85, 0xfff0d0]];
+  for (let k = 0; k < 9; k++) {
+    const u = k / 8;
+    FL.push([0.6 + u * 11.5, 0, 0, 4.2 - 1.9 * u, 0.42 * (1 - u) ** 1.4 + 0.05, u < 0.4 ? 0xffc070 : 0xff9040]);
   }
   for (const [x, y, z, sc, op, col] of FL) {
     const sp = new THREE.Sprite(additive(hot, col));
@@ -108,11 +109,11 @@ export function createFireFX() {
   const P = Array.from({length: N}, () => ({a: rnd() * Math.PI * 2, r: Math.sqrt(rnd()), k: 0.9 + 0.2 * rnd(), lag: rnd() * 2.2}));
   const m4 = new THREE.Matrix4();
 
-  // smoke: 14 soft puffs that bloom out of the muzzle, drift forward and up, and fade by 0.30
+  // smoke: a short puff of 8 soft sprites that bloom out of the muzzle, drift a little forward and up, and fade by 0.30
   const sTex = smokeTex();
-  const puffs = Array.from({length: 14}, (_, i) => {
+  const puffs = Array.from({length: 8}, (_, i) => {
     const s = add(new THREE.Sprite(new THREE.SpriteMaterial({map: sTex, color: 0xb8b8bc, transparent: true, depthWrite: false, opacity: 0})));
-    s.userData = {i, d: 3 + rnd() * 14, up: (rnd() - 0.3) * 4, side: (rnd() - 0.5) * 5, s: 4 + rnd() * 5, rot: rnd() * 6};
+    s.userData = {i, d: 2 + rnd() * 7, up: (rnd() - 0.3) * 2.5, side: (rnd() - 0.5) * 3, s: 3 + rnd() * 3.5, rot: rnd() * 6};
     s.material.rotation = s.userData.rot;
     return s;
   });
@@ -160,9 +161,9 @@ export function createFireFX() {
       s.visible = u > 0 && u < 1;
       if (!s.visible) continue;
       const g = 1 - (1 - u) ** 3; // rushes out, then hangs
-      s.position.set(MUZZLE + 1 + s.userData.d * g + 4 * u, s.userData.up * g + 2.5 * u, s.userData.side * g);
-      s.scale.setScalar(s.userData.s * (0.3 + 0.9 * g));
-      s.material.opacity = 0.55 * Math.min(1, u / 0.08) * (1 - u) ** 1.5;
+      s.position.set(MUZZLE + 1 + s.userData.d * g + 2 * u, s.userData.up * g + 1.5 * u, s.userData.side * g);
+      s.scale.setScalar(s.userData.s * (0.3 + 0.8 * g));
+      s.material.opacity = 0.45 * Math.min(1, u / 0.08) * (1 - u) ** 2;
     }
   }
   return {group: root, shot, light, pose};

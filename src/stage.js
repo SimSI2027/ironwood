@@ -218,9 +218,15 @@ export function createStage(canvas) {
   const aoSize = ao.setSize.bind(ao);
   ao.setSize = (w, h) => aoSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
   const aoRender = ao.render.bind(ao);
+  // the fire effects (additive sprites, smoke) are hidden from it too: drawn with its normal/depth override
+  // they wrote garbage and the AO blend blacked out each sprite's whole quad
+  const noAO = [];
   ao.render = (...args) => {
     floorR.visible = catcher.visible = false;
+    const vis = noAO.map((o) => o.visible);
+    noAO.forEach((o) => (o.visible = false));
     aoRender(...args);
+    noAO.forEach((o, i) => (o.visible = vis[i]));
     showFloors();
   };
   composer.addPass(ao);
@@ -362,7 +368,7 @@ export function createStage(canvas) {
     }
     return null;
   };
-  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, crossfade, key, cool, fill, under, floor: floorR, cut: {}, tier: 'high'};
+  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, crossfade, key, cool, fill, under, noAO, floor: floorR, cut: {}, tier: 'high'};
   S.render = () => composer.render();
   return S;
 }

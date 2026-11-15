@@ -95,7 +95,7 @@ export const FIRE_TICKS = [
   {t: 0.114, name: 'Burn', part: 'chambered'},
   {t: 0.15, name: 'Travel', part: 'shot column'},
   {t: 0.21, name: 'Muzzle', part: 'choke tube'},
-  {t: 0.214, name: 'Recoil', part: 'recoil pad'},
+  {t: 0.235, name: 'Recoil', part: 'recoil pad'}, // the label after the flash's peak (0.215): the Muzzle tick and its camera cover the flash
 ];
 export const PUMP_TICKS = [
   {t: FIRE_END, name: 'Closed', part: 'bolt'},

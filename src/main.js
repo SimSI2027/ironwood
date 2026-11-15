@@ -70,6 +70,7 @@ async function main() {
   // the muzzle flash light first: it is in every lit program
   const fx = createFireFX();
   gun.add(fx.group);
+  S.noAO.push(fx.group.children[0]); // the effects, not the flash light
   const asms = [buildBarrel, buildMagazine, buildForend, buildReceiver, buildBolt, buildTrigger, buildStock, buildPad].map((build) => {
     const a = build();
     gun.add(a.group);
@@ -464,7 +465,9 @@ async function main() {
     const L = (g1 - g0) * 0.6;
     const pc = part ? gun.worldToLocal(new THREE.Box3().setFromPoints(subjectPts(part)).getCenter(new THREE.Vector3())).x : (g0 + g1) / 2;
     const xa = Math.min(Math.max(pc - L / 2, g0), g1 - L);
-    return [{obj: gun, slab: [xa, xa + L]}, part];
+    // the Muzzle tick's part includes its flash: the bloom's 15 cm past the crown
+    const flash = tk.name === 'Muzzle' ? [[15, 0, 0], [15, 3, 0], [15, -3, 0], [8, 0, 4], [8, 0, -4]].map(([x, y, z]) => gun.localToWorld(new THREE.Vector3(MUZZLE + x, y, z))) : [];
+    return [{obj: gun, slab: [xa, xa + L]}, part, flash];
   }
   function clockKeys() {
     const gp = gun.position.clone();
