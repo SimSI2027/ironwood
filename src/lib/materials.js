@@ -11,6 +11,21 @@ float wNoise(vec3 x){
 float wFbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++){ s += a * wNoise(p); p = p * 2.03 + 11.7; a *= 0.5; } return s; }
 `;
 
+/** GLSL: soft-caps the lit colour's luminance under the bloom threshold (0.9), so the surface never blooms. */
+export const NO_BLOOM = /* glsl */ `{ float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  if (lum > 0.6) outgoingLight *= (0.6 + 0.28 * (1.0 - exp(-(lum - 0.6) / 0.28))) / lum; }`;
+/** Chain NO_BLOOM onto a material, just before its output. */
+export function noBloom(m) {
+  const base = m.onBeforeCompile;
+  const key = m.customProgramCacheKey();
+  m.onBeforeCompile = (sh, r) => {
+    base.call(m, sh, r);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', NO_BLOOM + '\n#include <opaque_fragment>');
+  };
+  m.customProgramCacheKey = () => key + '|nobloom';
+  return m;
+}
+
 /**
  * Oiled walnut: long grain along the part's local X, two brown tones and dark figure.
  * opt.dark tints it (checkered panels), opt.seed shifts the figure between parts.

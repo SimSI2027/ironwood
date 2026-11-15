@@ -8,6 +8,7 @@
 // 0.47-0.55 it rises on the elevator to bore level · 0.60-1.00 forend forward, the bolt carries it in.
 import * as THREE from 'three';
 import {latheX} from './lib/geo.js';
+import {NO_BLOOM, noBloom} from './lib/materials.js';
 import {MAG_Y} from './barrel.js';
 import {BOLT_TRAVEL} from './forend.js';
 import {FLOOR_Y} from './stage.js';
@@ -153,10 +154,14 @@ function spentHull() {
     return [nr];
   });
 }
+// shells never emit (emissive 0) and never bloom; only the hull's Burn glow (uA > 0) lifts the cap
 const mats = () => ({
-  brass: new THREE.MeshPhysicalMaterial({color: 0xc29a48, metalness: 1, roughness: 0.3, transparent: false}),
-  primer: new THREE.MeshPhysicalMaterial({color: 0x9aa0a8, metalness: 1, roughness: 0.35}),
+  brass: noBloom(new THREE.MeshPhysicalMaterial({color: 0xc29a48, metalness: 1, roughness: 0.35, emissive: 0, emissiveIntensity: 0})),
+  primer: noBloom(new THREE.MeshPhysicalMaterial({color: 0x9aa0a8, metalness: 1, roughness: 0.35, emissive: 0, emissiveIntensity: 0})),
 });
+const HULL = {color: 0xa31a1a, roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3, emissive: 0, emissiveIntensity: 0};
+// fired hull: 15% duller than a live one (darker, rougher, less clearcoat), scorched toward the mouth
+const SPENT_HULL = {...HULL, color: new THREE.Color(0xa31a1a).multiplyScalar(0.85), roughness: 0.46, clearcoat: 0.255, vertexColors: true};
 /** Hull glow: emissive that fills the hull from the base (geometry x 1.2) forward to uX, strength uA. */
 function glowHull(m) {
   const U = {uX: {value: 0}, uA: {value: 0}};
@@ -165,7 +170,8 @@ function glowHull(m) {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vGX;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGX = position.x;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGX;\nuniform float uX;\nuniform float uA;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(3.4, 1.15, 0.22) * uA * smoothstep(uX + 0.5, uX - 0.5, vGX);');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(3.4, 1.15, 0.22) * uA * smoothstep(uX + 0.5, uX - 0.5, vGX);')
+      .replace('#include <opaque_fragment>', 'if (uA < 0.001) ' + NO_BLOOM + '\n#include <opaque_fragment>');
   };
   m.customProgramCacheKey = () => 'hullglow';
   m.userData.glow = U;
@@ -180,12 +186,12 @@ function shell(len, hull, hullMat, name, spent = false) {
   inner.add(new THREE.Mesh(headGeo(), M.brass), new THREE.Mesh(hull, glowHull(hullMat)));
   // primer: a fired one is dark, with the pin's dent in its centre
   const pp = spent ? [[0.05, 0], [0.03, 0.05], [-0.004, 0.1], [-0.012, 0.15], [-0.012, 0.22], [0.0, 0.26]] : [[-0.012, 0], [-0.012, 0.22], [0.0, 0.26]];
-  if (spent) Object.assign(M.primer, {color: new THREE.Color(0x3b3430), roughness: 0.7, metalness: 0.6});
+  if (spent) Object.assign(M.primer, {color: new THREE.Color(0x241e1b), roughness: 0.75, metalness: 0.5});
   inner.add(new THREE.Mesh(latheX(pp, 24), M.primer));
   const ms = [M.brass, M.primer, hullMat];
   if (spent) {
     // soot inside the opened mouth
-    const soot = new THREE.MeshStandardMaterial({color: 0x120c09, roughness: 0.95, side: THREE.DoubleSide});
+    const soot = noBloom(new THREE.MeshStandardMaterial({color: 0x0d0907, roughness: 0.95, side: THREE.DoubleSide, emissive: 0, emissiveIntensity: 0}));
     inner.add(new THREE.Mesh(latheX([[5.4, 0.8], [6.56, 0.83]], 48), soot));
     ms.push(soot);
   }
@@ -218,9 +224,9 @@ function scorch(g) {
  * tube, posed from the clock t. Add `group` to the gun so it shares the gun's frame.
  */
 export function createShells() {
-  const spent = shell(S_LEN, scorch(spentHull()), new THREE.MeshPhysicalMaterial({color: 0x781616, roughness: 0.62, clearcoat: 0.1, vertexColors: true}), 'spent shell', true);
-  const live = shell(F_LEN, freshHull(), new THREE.MeshPhysicalMaterial({color: 0xa31a1a, roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3}), 'shell');
-  const fresh = shell(F_LEN, freshHull(), new THREE.MeshPhysicalMaterial({color: 0xa31a1a, roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3}), 'shell');
+  const spent = shell(S_LEN, scorch(spentHull()), new THREE.MeshPhysicalMaterial(SPENT_HULL), 'spent shell', true);
+  const live = shell(F_LEN, freshHull(), new THREE.MeshPhysicalMaterial(HULL), 'shell');
+  const fresh = shell(F_LEN, freshHull(), new THREE.MeshPhysicalMaterial(HULL), 'shell');
   const group = new THREE.Group();
   group.add(spent, live, fresh);
   const face = (c) => BOLT_TRAVEL * channels(c).b; // bolt face x (0 when closed)
