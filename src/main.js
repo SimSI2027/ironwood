@@ -54,16 +54,43 @@ async function main() {
   // --- UI
   const ui = el('div', 'iw', null, app);
   const head = el('div', 'iw-head', '<span class="iw-brand">IRONWOOD <b>Mk I</b></span><span class="iw-dot">·</span><span class="iw-sub">Exploded view. Drag, scroll, take it apart.</span>', ui);
+  const qSeg = el('span', 'iw-q', '<button data-t="high">High</button><button data-t="low">Low</button>', head);
   el('div', 'iw-rule', null, ui);
   const hint = el('div', 'iw-hint', null, ui);
   const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${S.tier} quality`);
 
-  // --- quality tier: ?q=high|low forces it; phones start low; otherwise start high and let a
-  // 1 s frame-time probe at load drop to low if the median frame is slower than ~48 fps
+  // --- quality tier: ?q=high|low forces it; then a remembered header choice; then a discrete GPU
+  // (WebGL renderer string) starts high; else phones start low and the rest run a 1 s probe of the
+  // real per-frame render cost (render + 1 px readback to sync the GPU), high when it averages < 12 ms
   const forced = ['high', 'low'].includes(q.get('q')) ? q.get('q') : null;
+  let stored = null;
+  try {
+    stored = localStorage.getItem('ironwood.q');
+  } catch (e) {}
+  if (!['high', 'low'].includes(stored)) stored = null;
+  const gl = S.renderer.getContext();
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  const gpu = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
+  const discrete = /nvidia|geforce|quadro|rtx|gtx|radeon\s*(rx|pro|r9|vii)|arc\(tm\)\s*a\d|intel.*\barc\b/i.test(gpu);
   const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
-  S.setTier(forced || (phone ? 'low' : 'high'));
-  let probe = forced || phone ? null : {n: 0, t0: 0, dts: []};
+  const pre = forced || stored || (discrete ? 'high' : phone ? 'low' : null);
+  S.setTier(pre || 'high');
+  let probe = pre ? null : {n: 0, t0: 0, dts: []};
+  const px = new Uint8Array(4);
+  window.__PROBE = {gpu, discrete, tier: S.tier, by: forced ? 'url' : stored ? 'stored' : discrete ? 'gpu' : phone ? 'phone' : 'probe'};
+  const showQ = () => [...qSeg.children].forEach((b) => b.classList.toggle('on', b.dataset.t === S.tier));
+  qSeg.onclick = (e) => {
+    const t = e.target.dataset?.t;
+    if (!t) return;
+    probe = null;
+    S.setTier(t);
+    try {
+      localStorage.setItem('ironwood.q', t);
+    } catch (err) {}
+    showQ();
+    setHint();
+  };
+  showQ();
   setHint();
   const lead = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   lead.setAttribute('class', 'iw-lead');
@@ -278,14 +305,13 @@ async function main() {
       // skip the first 10 frames (shader compiles, shadow first-render), then sample one second
       probe.n++;
       if (probe.n === 11) probe.t0 = now;
-      else if (probe.n > 11) probe.dts.push(raw);
       if (probe.t0 && now - probe.t0 > 1000) {
-        const d = probe.dts.sort((x, y) => x - y);
-        const med = d[d.length >> 1] || 0;
-        if (med > 21) S.setTier('low');
-        window.__PROBE = {median: +med.toFixed(1), frames: d.length, tier: S.tier};
+        const avg = probe.dts.reduce((a, b) => a + b, 0) / Math.max(1, probe.dts.length);
+        S.setTier(avg < 12 ? 'high' : 'low');
+        Object.assign(window.__PROBE, {avg: +avg.toFixed(1), frames: probe.dts.length, tier: S.tier});
         probe = null;
         setHint();
+        showQ();
       }
     }
 
@@ -343,7 +369,12 @@ async function main() {
       lastE = st.explode;
       lastP = st.pump;
     }
-    S.render();
+    if (probe && probe.t0) {
+      const t0 = performance.now();
+      S.render();
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      probe.dts.push(performance.now() - t0);
+    } else S.render();
     if (!window.__READY) {
       window.__READY = true;
       window.__STATS = {meshes: meshes.length, parts: asms.reduce((n, a) => n + a.parts.length, 0), tris: S.renderer.info.render.triangles, tier: S.tier};
