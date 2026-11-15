@@ -15,7 +15,7 @@ import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN, blend} from './tour.js';
 import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, FIRE_TICKS, tickAt, FULL_S, FIRE_END, pumpC, tOfC} from './cycle.js';
 import {createFireFX, recoilAt, RECOIL, shotX} from './fire.js';
-import {MAG_Y} from './barrel.js';
+import {MAG_Y, MUZZLE} from './barrel.js';
 import {PUMP} from './forend.js';
 import {createPerf} from './perf.js';
 
@@ -279,9 +279,11 @@ async function main() {
   /**
    * Camera {t, p} looking along dir with every vertex of obj inside the free band (header and
    * dock excluded), 8% of the viewport clear on each side, at any aspect. fill > 1 backs off further.
+   * inner > 0: inside the central share `inner` of the whole area above the dock instead (both axes).
+   * obj: an object, or a list of objects and point arrays.
    */
-  function frame(obj, dir = new THREE.Vector3(0.38, 0.3, 1), fill = 1, adjust = true) {
-    const pts = pointsOf(obj, true);
+  function frame(obj, dir = new THREE.Vector3(0.38, 0.3, 1), fill = 1, adjust = true, inner = 0) {
+    const pts = [obj].flat().flatMap((o) => (Array.isArray(o) ? o.map((p) => p.clone()) : pointsOf(o, true)));
     dir = dir.clone();
     if (adjust && camera.aspect < 0.8) dir.x += 0.6; // portrait: look further along the axis
     dir.normalize();
@@ -292,7 +294,9 @@ async function main() {
     const tx = ty * camera.aspect;
     const m = 0.16; // 8% of the viewport on each side, in NDC units
     const [b0, b1] = band();
-    const W = {x0: -1 + m, x1: 1 - m, y0: b0 + m, y1: b1 - m};
+    const a0 = b0 - 12 / S.size.h; // the dock's top edge (band() keeps 6 px clear of it)
+    const my = ((1 - a0) * (1 - inner)) / 2;
+    const W = inner ? {x0: -inner, x1: inner, y0: a0 + my, y1: 1 - my} : {x0: -1 + m, x1: 1 - m, y0: b0 + m, y1: b1 - m};
     const c = new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
     const P = pts.map((p) => {
       p.sub(c);
@@ -327,11 +331,16 @@ async function main() {
     flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15));
   }
 
-  // --- clock camera: a pure function of t. Pushes to the trigger group for Press-Strike, tracks the
-  // shot down the barrel, pulls wide for Muzzle-Recoil, moves to the port for the eject. Keys are
+  // --- clock camera: a pure function of t. The FIRE keys hold each tick's active part inside the
+  // central 60% of the area above the panel (framed at 54%, room for the recoil): a close-up on
+  // trigger, hammer, firing pin and chambered shell for Press-Burn, out by the end of Burn; for Travel a side-on view of the
+  // whole gun that pans with the shot (the muzzle ends at 76% of the width, 90% of the gun on screen);
+  // the whole gun inside the central 60% for Muzzle-Recoil; then the port for the eject. Keys are
   // framed on the assembled gun at rest.
   let ckeys = null;
   let dir = null; // {from, t0}: the camera follows the clock (FIRE/PUMP/FULL, scrubber, step)
+  const IN = 0.54;
+  const SIDE = new THREE.Vector3(0.15, 0.22, 1);
   function clockKeys() {
     const gp = gun.position.clone();
     const gr = gun.rotation.z;
@@ -339,14 +348,29 @@ async function main() {
     gun.rotation.z = 0;
     poseAll(0, 0);
     gun.updateMatrixWorld(true);
-    const wide = frame(gun, HERO_DIR);
-    const trig = frame(asms[5].group, new THREE.Vector3(0.2, 0.12, 1), 1.35);
-    const k = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * Math.min(1, camera.aspect);
-    const at = (x, y, z, d, h) => {
-      const t = gun.localToWorld(new THREE.Vector3(x, y, z));
-      return {t, p: t.clone().addScaledVector(d.normalize(), h / k)};
+    const whole = frame(gun, SIDE, 1, true, IN);
+    // close-up: the trigger, the hammer cocked and fallen, the firing pin, the chambered shell
+    shells.pose(0.12, false, true);
+    const parts = ['trigger', 'hammer', 'firing pin'].map(partByName);
+    const cocked = pointsOf(parts[1], true);
+    poseAll(0, {f: 0, b: 0, lock: 0, elev: 0, ham: 1, trig: 1, pin: 1});
+    const close = frame([...parts, cocked, shells.chambered()], new THREE.Vector3(0.2, 0.12, 1), 1, true, IN);
+    poseAll(0, 0);
+    // Travel: the whole gun side-on, then panned along camera right as the shot passes the centre
+    const trav = frame(gun, SIDE);
+    const camA = camera.clone();
+    camA.position.copy(trav.p);
+    camA.lookAt(trav.t);
+    camA.updateMatrixWorld();
+    const ndcX = (x) => gun.localToWorld(new THREE.Vector3(x, 0, 0)).project(camA).x;
+    const xm = ndcX(MUZZLE);
+    const right = new THREE.Vector3().setFromMatrixColumn(camA.matrixWorld, 0);
+    const panW = (xm - 0.52) * trav.p.distanceTo(trav.t) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
+    const track = (t) => {
+      const w = clamp01(ndcX(shotX(t)) / xm);
+      const o = right.clone().multiplyScalar(panW * w);
+      return {t: trav.t.clone().add(o), p: trav.p.clone().add(o)};
     };
-    const track = (x) => at(x, 0, 0, new THREE.Vector3(-0.35, 0.32, 1), 10);
     // the port and the ejected shell's whole envelope (apex 12 cm up, landing and roll on the floor),
     // framed into the free band between the header and the dock
     const env = new THREE.Mesh(new THREE.BoxGeometry(18, 45, 38));
@@ -358,15 +382,16 @@ async function main() {
     gun.position.copy(gp);
     gun.rotation.z = gr;
     poseAll(st.explode, channelsAt(st.t, st.fired));
-    return {wide, trig, track, port};
+    shells.pose(st.t, st.fired, st.t > 0 && st.explode < 0.02);
+    return {whole, close, track, port};
   }
   function clockCam(t, fresh = false) {
     if (fresh || !ckeys) ckeys = clockKeys();
     const K = ckeys;
-    if (t < 0.11) return blend(K.wide, K.trig, smr(0, 0.03, t));
-    if (t < 0.204) return blend(K.trig, K.track(t < 0.15 ? 3 : shotX(t)), smr(0.11, 0.14, t));
-    if (t < 0.3) return blend(K.track(shotX(Math.min(t, 0.21))), K.wide, smr(0.204, 0.222, t)); // pulls wide through the flash
-    return blend(K.wide, K.port, smr(0.3, 0.4, t));
+    if (t < 0.125) return blend(K.whole, K.close, smr(0, 0.03, t));
+    if (t < 0.204) return blend(K.close, K.track(t), smr(0.125, 0.15, t)); // out to the whole gun before Travel
+    if (t < 0.3) return blend(K.track(Math.min(t, 0.21)), K.whole, smr(0.204, 0.213, t)); // pulls wide through the flash
+    return blend(K.whole, K.port, smr(0.3, 0.4, t));
   }
   const direct = () => !dir && (dir = {from: null, t0: 0});
   /** x-ray per phase: trigger group and receiver Press-Strike, barrel Burn-Travel, receiver in the pump. */
@@ -854,7 +879,7 @@ async function main() {
   MARKS.shaders = performance.now();
   load.remove();
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame}; // controls + frame: for the hero and check shots
+  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame, clockCam, partByName, TICKS, tickAt}; // controls + frame: for the hero and check shots
 }
 
 main().catch((e) => {
