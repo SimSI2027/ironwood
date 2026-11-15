@@ -27,3 +27,29 @@ Hitch: the first 3 s after the clock first enters x-ray measured 15.5 ms GPU and
 Not costs here (checked): x-ray materials are already plain alpha + brass edge lines (no transmission);
 the shadow map already re-renders only when explode or the clock moves; procedural textures are
 128-256 px canvases built once and cached; the reflection target is a fixed 1024², not full resolution.
+
+## After (session 9, items 2-4)
+
+Load, 1920x1080, three runs: script parsed 28 · stage (context + PMREM) 460 · geometry 930 · shaders
+compiled 1490 · **first frame 1555-1583 ms** (was 4020). 2560x1440: first frame 1555 ms.
+
+What moved it: every program compiles in parallel (compileAsync per assembly as soon as it is built,
+against the composer's linear target; post-pass shaders unlit, like their quads), 3.0 s inside the
+first frame -> 0.55 s after the geometry; the forend's arcs 72 points instead of 144 (its build 410 -> ~200 ms).
+
+Hitches: the muzzle flash light came and went with its group, so every lit program had a second
+variant (numPointLights 0/1): the first shot recompiled them all (83 ms frame). It now stays counted at
+intensity 0. Transparent variants (dim, x-ray) and the outline pass's programs are warmed after the
+first frame. Worst frame in every state now 16.8 ms (was 25.8 ms mean on the first x-ray, 83 ms on the first shot).
+
+| state (reset per state, 2.5 s) | GPU ms 1080p | GPU ms 1440p | frame / worst | drawn/s | draws | tris |
+|---|---|---|---|---|---|---|
+| settled, no input | - | - | none drawn | 0 (was 60) | - | - |
+| idle auto-turn | 6.9-7.3 | 7.4 | 33.3 / 33.5 | 31 (was 60) | 365 | 687k (was 841k) |
+| x-ray held | 5.9-7.5 | 3.8 | 33.3 / 33.5 | 31 | 577 | 1.02M |
+| cycle playing | 4.3-5.0 | 6.3 | 16.67 / 16.8 | 61 | 1031 | 1.71M |
+
+The idle and x-ray GPU ms read higher than before because the GPU clocks down at 30 fps; per pass,
+SSAO (now half resolution) and main stay the largest. 60 fps holds at 2560x1440 with no step dropped.
+Adaptive quality, tested with a forced 25 ms render: SSAO off after ~1 s, reflection off after ~2 s,
+DPR step skipped at DPR 1; header shows "· no SSAO · no reflection".
