@@ -89,6 +89,8 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
       P.pass = Object.fromEntries(Object.entries(hist).map(([k, v]) => [k, +avg(v).toFixed(3)]));
       P.gpuMs = +Object.values(P.pass).reduce((s, v) => s + v, 0).toFixed(3);
       P.frameMs = +avg(cpu).toFixed(2);
+      P.frameMax = +Math.max(0, ...cpu).toFixed(1);
+      P.programs = renderer.info.programs.length;
       P.size = `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`;
       P.tier = S.tier;
       const ms = (v) => (v == null ? '-' : v.toFixed(0)).padStart(6) + ' ms';
@@ -96,7 +98,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
         `IRONWOOD perf · ${S.tier} · ${P.size}\n` +
         [['script parsed', marks.parsed], ['textures built', marks.textures], ['shaders compiled', marks.shaders], ['first frame', marks.first]].map(([k, v]) => k.padEnd(17) + ms(v)).join('\n') + '\n\n' +
         (ext ? ['shadows', 'main', 'reflection', 'ssao', 'bloom', 'x-ray', 'outline', 'post'].map((k) => `${k.padEnd(11)}${(P.pass[k] || 0).toFixed(2).padStart(6)} ms`).join('\n') + `\n${'GPU total'.padEnd(11)}${P.gpuMs.toFixed(2).padStart(6)} ms` : 'no GPU timer query') +
-        `\nframe      ${P.frameMs.toFixed(1).padStart(6)} ms\n\ndraws ${P.calls} · tris ${P.tris}\n${gpu}`;
+        `\nframe      ${P.frameMs.toFixed(1).padStart(6)} ms (max ${P.frameMax})\nprograms ${P.programs}\n\ndraws ${P.calls} · tris ${P.tris}\n${gpu}`;
     },
   };
 }

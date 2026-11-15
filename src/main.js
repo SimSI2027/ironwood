@@ -44,25 +44,55 @@ function el(tag, cls, html, parent) {
 
 async function main() {
   await loadFonts();
+  MARKS.fonts = performance.now();
   const app = document.getElementById('app');
   const canvas = el('canvas', null, null, app);
   canvas.id = 'gl';
   const S = createStage(canvas);
   const {scene, camera} = S;
+  MARKS.stage = performance.now();
 
-  // --- the object
-  const asms = [buildBarrel(), buildMagazine(), buildForend(), buildReceiver(), buildBolt(), buildTrigger(), buildStock(), buildPad()];
+  // --- the object. Each assembly's programs start compiling in parallel (KHR_parallel_shader_compile)
+  // as soon as it is built, while the next one builds on the main thread; a brass line shows progress.
+  // Compiled for a render target (linear: the composer and the floor reflection render into one).
+  const load = el('div', 'iw-load', '<i></i>', app);
+  const jobs = [];
+  let built = 0;
+  const bump = () => load.firstChild.style.setProperty('--p', `${((++built / Math.max(jobs.length, 12)) * 100).toFixed(0)}%`);
+  const compile = (o, rt = S.composer.readBuffer, lit = scene) => {
+    S.renderer.setRenderTarget(rt);
+    jobs.push(S.renderer.compileAsync(o, camera, lit).then(bump));
+    S.renderer.setRenderTarget(null);
+  };
   const gun = new THREE.Group();
   gun.position.set(-12, 0, 0);
-  asms.forEach((a) => (gun.add(a.group), a.finalize()));
   scene.add(gun);
-  const meshes = [];
-  gun.traverse((o) => o.isMesh && meshes.push(o));
-  // pump-cycle shells: posed from the clock st.t, not hoverable (added after the hover list)
-  const shells = createShells();
-  gun.add(shells.group);
+  // the muzzle flash light first: it is in every lit program
   const fx = createFireFX();
   gun.add(fx.group);
+  const asms = [buildBarrel, buildMagazine, buildForend, buildReceiver, buildBolt, buildTrigger, buildStock, buildPad].map((build) => {
+    const a = build();
+    gun.add(a.group);
+    a.finalize();
+    compile(a.group);
+    return a;
+  });
+  MARKS.geometry = performance.now();
+  const meshes = [];
+  asms.forEach((a) => a.group.traverse((o) => o.isMesh && meshes.push(o)));
+  // pump-cycle shells: posed from the clock st.t, not hoverable (not in the hover list)
+  const shells = createShells();
+  gun.add(shells.group);
+  // fx: its children, not its root (the root holds the flash light, which compile() would count twice)
+  [...fx.group.children.filter((o) => !o.isLight), shells.group, ...scene.children.filter((o) => o !== gun && o.isMesh)].forEach((o) => compile(o));
+  // the post passes' own shaders (SSAO, bloom, outline, vignette), unlit like their full-screen quads;
+  // the output pass sets its defines on its first render, so it compiles then
+  const quad = new THREE.PlaneGeometry(1, 1).deleteAttribute('normal'); // like FullScreenQuad's
+  S.composer.passes.forEach((p, i, all) => {
+    const g = new THREE.Group();
+    for (const v of Object.values(p)) for (const m of [v].flat()) if (m?.isMaterial) g.add(new THREE.Mesh(quad, m));
+    if (g.children.length && i < all.length - 1) compile(g, undefined, g);
+  });
   MARKS.textures = performance.now();
 
   // --- UI
@@ -740,12 +770,45 @@ async function main() {
       if (perf) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // first frame = the GPU finished it
       MARKS.shaders ??= performance.now(); // until compileAsync, the shaders compile inside the first frame
       MARKS.first = performance.now();
+      setTimeout(() => warmTransparent(), 300);
+      MARKS.programs = S.renderer.info.programs.length;
       window.__READY = true;
       window.__STATS = {meshes: meshes.length, parts: asms.reduce((n, a) => n + a.parts.length, 0), tris: S.renderer.info.render.triangles, tier: S.tier};
     }
     perf?.frameEnd(now);
     requestAnimationFrame(tick);
   };
+  /**
+   * After the first frame: the transparent variant of every part material (dimming, x-ray, shells),
+   * compiled in the background, so the first dim or x-ray does not stall on a compile.
+   */
+  function warmTransparent(groups = [...asms.map((a) => a.group), shells.group, ...fx.group.children.filter((o) => !o.isLight)]) {
+    // one group per call (not the gun: it holds the flash light, which compile() would count twice)
+    const g = groups.shift();
+    if (!g) {
+      // the outline pass's depth and mask programs: one outline render into the composer's buffer
+      // (off screen) while nothing moves, instead of a stall on the first hovered part
+      if (S.tier !== 'high') return;
+      const keep = S.outline.selectedObjects;
+      S.outline.selectedObjects = [asms[0].parts[0].obj];
+      S.outline.render(S.renderer, S.composer.writeBuffer, S.composer.readBuffer, 0, false);
+      S.outline.selectedObjects = keep;
+      return;
+    }
+    const mats = new Set();
+    g.traverse((o) => o.isMesh && [o.material].flat().forEach((m) => !m.transparent && mats.add(m)));
+    const flip = (t) => mats.forEach((m) => ((m.transparent = t), (m.needsUpdate = true)));
+    flip(true);
+    compile(g);
+    if (S.tier === 'low') compile(g, null);
+    flip(false);
+    setTimeout(() => warmTransparent(groups), 60);
+  }
+  // the low tier draws the gun straight to the screen: its tone-mapped variants too
+  if (S.tier === 'low') [gun, ...scene.children.filter((o) => o !== gun && o.isMesh)].forEach((o) => compile(o, null));
+  await Promise.all(jobs);
+  MARKS.shaders = performance.now();
+  load.remove();
   requestAnimationFrame(tick);
   window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame}; // controls + frame: for the hero and check shots
 }

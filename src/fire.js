@@ -97,7 +97,10 @@ export function createFireFX() {
   }
   const light = new THREE.PointLight(0xffa24a, 0, 0, 2);
   light.position.set(MUZZLE + 3, 1, 0);
-  group.add(light);
+  // the light stays visible (intensity 0 when off) outside the toggled group: a light that comes and
+  // goes changes every lit program's key, and the first shot would recompile them all mid-flash
+  const root = new THREE.Group();
+  root.add(group, light);
 
   // 60 pellets: fixed per-pellet direction and speed, positions are functions of t
   const N = 60;
@@ -162,5 +165,5 @@ export function createFireFX() {
       s.material.opacity = 0.55 * Math.min(1, u / 0.08) * (1 - u) ** 1.5;
     }
   }
-  return {group, shot, light, pose};
+  return {group: root, shot, light, pose};
 }

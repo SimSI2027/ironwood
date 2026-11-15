@@ -21,7 +21,7 @@ function ribbedShell(L, Ri, Ro, open, ribs) {
   s.absarc(0, 0, Ro, a0, a1, false);
   s.absarc(0, 0, Ri, a1, a0, true);
   s.closePath();
-  let g = extrudeYZ(s, L, 0.16, 72, 260);
+  let g = extrudeYZ(s, L, 0.16, 36, 260); // 72 points per arc (4 deg): was 144, half the build time
   const p = g.attributes.position;
   const mid = (Ri + Ro) / 2;
   const R = (x) => {

@@ -26,6 +26,6 @@ await page.waitForTimeout(2500);
 const cycle = await read();
 const r = (o) => Object.fromEntries(Object.entries(o.marks).map(([k, v]) => [k, Math.round(v)]));
 console.log('renderer', idle.renderer, '| timer', idle.timer, '| buffer', idle.size, '| marks', JSON.stringify(r(idle)));
-for (const [k, s] of Object.entries({idle, xray, cycle})) console.log(k.padEnd(6), 'gpu', s.gpuMs, 'frame', s.frameMs, 'calls', s.calls, 'tris', s.tris, JSON.stringify(s.pass));
+for (const [k, s] of Object.entries({idle, xray, cycle})) console.log(k.padEnd(6), 'gpu', s.gpuMs, 'frame', s.frameMs, 'max', s.frameMax, 'programs', s.programs, 'calls', s.calls, 'tris', s.tris, JSON.stringify(s.pass));
 console.log('errors', errs.length ? errs.join('\n') : 'none');
 await browser.close();

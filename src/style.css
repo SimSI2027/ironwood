@@ -178,3 +178,6 @@ html, body { background: var(--iw-bg); }
 .iw-vig { position: absolute; inset: 0; pointer-events: none; display: none;
   background: radial-gradient(ellipse 75% 75% at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.35) 100%); }
 .iw-vig.on { display: block; }
+/* shader compile progress: one short brass line, centred */
+.iw-load { position: absolute; left: 50%; top: 50%; width: 160px; height: 2px; margin-left: -80px; background: rgba(201, 162, 75, 0.18); pointer-events: none; }
+.iw-load i { display: block; height: 100%; width: var(--p, 0%); background: #c9a24b; transition: width 0.15s; }

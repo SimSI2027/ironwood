@@ -167,6 +167,9 @@ export function createStage(canvas) {
   ao.updateGtaoMaterial({radius: 1.4, distanceExponent: 1.4, thickness: 1.5, scale: 1.0, samples: 16});
   ao.updatePdMaterial({lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16});
   ao.blendIntensity = 0.8;
+  // half resolution: the largest GPU pass; AO is soft, the blend samples it bilinearly
+  const aoSize = ao.setSize.bind(ao);
+  ao.setSize = (w, h) => aoSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
   const aoRender = ao.render.bind(ao);
   ao.render = (...args) => {
     floorR.visible = catcher.visible = false;
