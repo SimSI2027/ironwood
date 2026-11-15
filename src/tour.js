@@ -46,7 +46,7 @@ export function createTour({asms, poseAll, frame, gun}) {
     rec.t.x += 9;
     rec.p.x += 9;
     rec.p.sub(rec.t).multiplyScalar(1.9).add(rec.t);
-    poseAll(0.62, 0);
+    poseAll(0.7, 0);
     const parts = asms.map((a) => frame(a.group, new THREE.Vector3(0.45, 0.36, 1), 1.12));
     poseAll(1, 0);
     const all = frame(gun, new THREE.Vector3(0.3, 0.32, 1), 0.92);
@@ -69,14 +69,14 @@ export function createTour({asms, poseAll, frame, gun}) {
       cam = blend(orbit(C.hero, -0.12), C.rec, sm(2, 2.9, t));
       pump = pumpCycle(t, 2.55) + pumpCycle(t, 3.75);
     } else if (t < 5 + n) {
-      explode = 0.62 * sm(5, 6, t);
+      explode = 0.7 * sm(5, 6, t);
       const k = Math.min(n - 1, Math.floor(t - 5));
       focus = k;
       // each beat drifts 0.08 rad; the next beat starts from where the last one ended (no snap)
       const prev = k === 0 ? C.rec : orbit(C.parts[k - 1], DRIFT);
       cam = blend(prev, orbit(C.parts[k], DRIFT * (t - 5 - k)), sm(5 + k, 5 + k + 0.6, t));
     } else if (t < 18) {
-      explode = 0.62 + 0.38 * sm(13, 14.4, t);
+      explode = 0.7 + 0.3 * sm(13, 14.4, t);
       const turn = orbit(C.all, -Math.PI * 1.1 * sm(13, 18, t) * 0.9);
       cam = blend(orbit(C.parts[n - 1], DRIFT), turn, sm(13, 13.9, t));
     } else {

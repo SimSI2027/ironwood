@@ -6,7 +6,7 @@ import {PUMP} from './forend.js';
 import {PIN_F} from './receiver.js';
 
 export function buildBolt() {
-  const A = new Asm('bolt', 'Bolt', {offset: [-3, 9.5, 5.5], delay: 0.3});
+  const A = new Asm('bolt', 'Bolt', {offset: [-3, 9.5, 5.5], delay: 0.3, inner: true});
   const M = A.M;
   const ride = {pump: PUMP};
 

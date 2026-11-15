@@ -5,7 +5,7 @@ import {Asm} from './lib/asm.js';
 import {MAG_Y} from './barrel.js';
 
 export function buildMagazine() {
-  const A = new Asm('magazine', 'Magazine', {offset: [12, -9.5, 0], delay: 0.7});
+  const A = new Asm('magazine', 'Magazine', {offset: [18, -9.5, 0], delay: 0.7});
   const M = A.M;
   const ro = 1.1;
   const ri = 0.98;

@@ -10,7 +10,8 @@ export class Asm {
    * key, label: ids. offset: where the whole assembly goes at full explode [x, y, z].
    * delay: 0..1 stagger of the assembly phase.
    */
-  constructor(key, label, {offset = [0, 0, 0], delay = 0} = {}) {
+  constructor(key, label, {offset = [0, 0, 0], delay = 0, inner = false} = {}) {
+    this.inner = inner; // lives inside the receiver: no axial slide, moves only in stage 2
     this.key = key;
     this.label = label;
     this.group = new THREE.Group();
@@ -58,12 +59,15 @@ export class Asm {
 
   /** Explode e in 0..1, pump stroke p in 0..1. Assemblies split first, then parts fan out. */
   pose(e, p = 0) {
-    const a = ease(clamp01((e - this.delay * 0.18) / 0.5));
-    this.group.position.copy(this.offset).multiplyScalar(a);
+    // stage 1 (e 0-0.5): the assemblies on the axis slide apart along it, staggered.
+    // stage 2 (e 0.45-1): each assembly steps to its row (trigger drops, bolt lifts), then its parts fan out.
+    const a = ease(clamp01((e - this.delay * 0.12) / 0.38));
+    const l = ease(clamp01((e - 0.45 - this.delay * 0.1) / 0.3));
+    this.group.position.set(this.offset.x * (this.inner ? l : a), this.offset.y * l, this.offset.z * l);
     const q = new THREE.Quaternion();
     const qe = new THREE.Quaternion();
     for (const part of this.parts) {
-      const b = ease(clamp01((e - 0.42 - part.delay * 0.16) / 0.42));
+      const b = ease(clamp01((e - 0.58 - part.delay * 0.14) / 0.28));
       part.obj.position.copy(part.ex).multiplyScalar(b).add(part.rest);
       part.obj.position.x += part.pump * p;
       part.obj.quaternion.copy(part.restQ);

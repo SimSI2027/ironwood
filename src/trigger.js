@@ -11,7 +11,7 @@ const SEAR = [-10.6, -4.25];
 const SAFETY = [-13.35, -5.62];
 
 export function buildTrigger() {
-  const A = new Asm('trigger', 'Trigger group', {offset: [-2, -17, 0], delay: 0.1});
+  const A = new Asm('trigger', 'Trigger group', {offset: [-2, -17, 0], delay: 0.1, inner: true});
   const M = A.M;
 
   // --- housing: lower body under the receiver, two inner walls with pin bores and lightening cuts
