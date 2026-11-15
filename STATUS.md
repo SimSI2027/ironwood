@@ -1,11 +1,11 @@
-# STATUS — 2026-11-15, session 6 (fire + pump clock)
-- Done 1: one clock t, FIRE 0-0.30 (press, hammer, strike, burn, travel, muzzle, recoil; src/fire.js) + PUMP 0.30-1 (old cycle remapped). Hammer re-cocks against the bolt, trigger resets on lock, the ejected shell is spent only if t passed Strike (0.11) since the last pump; otherwise it ejects clean. 1 s = 1/1.7 of t at 1x.
-- Done 2: x-ray by phase (trigger group + receiver 0.025-0.115, barrel 0.11-0.212, receiver in the pump); the camera follows t (trigger close-up, shot tracking, wide, port) until you orbit; the tour uses it.
-- Done 3: ejection is closed-form: slides onto the port sill, pivots mouth-out on that edge, flies 30 x 12 cm (spin and tumble linear), bounces 3 cm, rolls 4 cm, fades by c 0.92.
-- Done 4/5: Fire/Pump/Full, split scrubber (active segment 70%, labels never overlap: a colliding label is hidden, the active one wins), 4 speeds, 1/240 s step, s + frame readout; README, hero, job tour/cycle lines (job file still untracked).
-- Fixed after the 3 shots: hard-edged muzzle cone → soft sprites + light at 1/3; port camera framed into the header-dock band; camera pulls wide through the flash. Pages: see the push check in chat.
-- Changed your times: Burn tick 0.114 and Recoil 0.214 (one frame after Strike/Muzzle) so they step and label separately; the motions still start at 0.11 / 0.21.
-- Skipped: the red bloom on the fresh shell under x-ray and the bright brass-pin blooms in the trigger close-up.
-- Look first 1) docs/hero.png is shot 3, taken BEFORE the port-camera fix: the shell's top is clipped by the header. Re-shoot it.
-- 2) Press-Strike at 0.05x: hammer path and re-cock against the bolt/slide are computed, not checked frame by frame.
-- 3) Muzzle at 0.05x: the new sprite flash, light and smoke are unseen (no screenshot left); tune sizes and light 1.1e4 in src/fire.js.
+# STATUS — 2026-11-15, session 7 (10-item polish)
+- Done 1/2: shell pivots base-out on the sill and flies straight to +z, rising 0.8 cm (top 1.38 vs receiver 1.62 in the first 30%, measured); shells emissive 0 and no-bloom capped except the Burn glow; fired shell darker primer and soot, hull 15% duller; brass 0.35.
+- Done 3/4: stock is a loft (oval sections, straight comb, grip curve, smooth belly, 5.42 cm at the joint = receiver rear), pad and spacer follow the oval butt; trigger is a 4 mm blade and the guard a 3 mm oval loop, both blued.
+- Done 5/6: bloom 0.9 / 0.25, all parts soft-capped under 0.9 (NO_BLOOM in lib/materials.js); band blued with 2 screws; forend and stock use one walnut (M.wood).
+- Done 7/8/9: floor reflection at 12%, blurred, faded within 40 cm; one contact shadow; catcher removed. Framing measured from real vertices: 8.0% at both ends. Labels 11 px / 70%, active 13 px brass.
+- Done 10: hero 1600x900, front three-quarter, HIGH, no UI, spent shell just out of the port (scratchpad pose.js drove it).
+- Fixed after the 3 shots: the checkered panel sat on the wrist, not the grip, and read as grey glass side-on → a lens along the grip curve, matte.
+- Pushed c0b092c; Pages built it and https://simsi2027.github.io/ironwood/ returns 200, byte-identical to docs/index.html.
+- Look first 1) The hero and the panel fix are unseen (no screenshots left): check the panel on the grip and the hero composition.
+- 2) Side-on, the receiver and the walnut wash out to silver/grey from the RoomEnvironment reflection. Not touched.
+- 3) The forend still reads lighter and more orange than the stock under the same material (lighting and small radius). IRONWOOD_JOB.md is still untracked.
