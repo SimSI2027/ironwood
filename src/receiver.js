@@ -6,7 +6,35 @@ import {Asm} from './lib/asm.js';
 import {MAG_Y} from './barrel.js';
 
 export const REC = {x0: -20.5, x1: 0, half: 1.55, wall: 0.3, top: 1.0, bottom: -5.3};
-const WALL = {color: 0x3a4658, rough: 0.5, env: 1.0};
+// blued steel, not paint: metalness 1, roughness 0.3, base #1b2230; a faint lengthwise brushed normal, and the
+// room's reflection sweeps light (rear) to dark (front) across the wall; uSweep compresses that sweep (x5.6 rear to
+// x11.2 front) into luminance 20-30 so the flat face reads as polished metal, not black or paint
+const WALL = {color: 0x1b2230, rough: 0.3, env: 1.0, sweep: [2.25, 1.5], brush: 0.1};
+let brushTex = null;
+/** Lengthwise brushing: rows of fine height noise (constant along the wall's length), as a tangent-space normal map. */
+function brushTexture() {
+  if (brushTex) return brushTex;
+  const N = 256;
+  const h = new Float32Array(N);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < N; i++) h[i] = rnd();
+  for (let k = 0; k < 2; k++) for (let i = 0; i < N; i++) h[i] = (h[(i + N - 1) % N] + 2 * h[i] + h[(i + 1) % N]) / 4;
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = N;
+  const g = c.getContext('2d');
+  for (let i = 0; i < N; i++) {
+    const ny = Math.max(-1, Math.min(1, (h[(i + 1) % N] - h[(i + N - 1) % N]) * 6));
+    g.fillStyle = `rgb(128,${Math.round(128 + 127 * ny)},255)`;
+    g.fillRect(0, i, 4, 1);
+  }
+  brushTex = new THREE.CanvasTexture(c);
+  brushTex.wrapS = brushTex.wrapT = THREE.RepeatWrapping;
+  brushTex.colorSpace = THREE.NoColorSpace;
+  brushTex.repeat.set(1, 0.25); // 256 rows over 4 cm
+  return brushTex;
+}
 export const PIN_F = [-4.6, -4.35];
 export const PIN_R = [-17.6, -4.35];
 export const PORT = [-11.3, -0.4, -1.35, 0.75]; // runs nearly to the front so a 6.6 cm hull clears at 7.5 cm of travel
@@ -48,10 +76,26 @@ export function buildReceiver() {
   // the walls are big flat faces: the standard steel (anisotropy, clearcoat, mirror roughness) reflects only the
   // dark room and reads black, so they get a rougher, lighter, isotropic variant that the key and the cool fill reach
   const wallM = M.steel.clone();
-  wallM.onBeforeCompile = M.steel.onBeforeCompile;
-  wallM.customProgramCacheKey = M.steel.customProgramCacheKey;
+  wallM.onBeforeCompile = (sh, r) => {
+    M.steel.onBeforeCompile(sh, r);
+    sh.uniforms.uSweep = {value: new THREE.Vector2(...WALL.sweep)};
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec2 uSweep;`)
+      .replace('#include <lights_fragment_end>', `{
+  float st = clamp((vMetal.x + 19.5) / 18.5, 0.0, 1.0);
+  // the sweep: a set light-to-dark studio reflection along the wall (rear light, front dark), with a quarter of the
+  // real room reflection kept for life; set, not multiplied, so its tones hold at every viewport and sway angle
+  float lum = dot(radiance, vec3(0.2126, 0.7152, 0.0722));
+  vec3 tint = lum > 1e-5 ? radiance / lum : vec3(1.0);
+  float sw = mix(uSweep.x, uSweep.y, smoothstep(0.0, 1.0, st)) * mix(0.92, 1.05, smoothstep(-5.0, 0.8, vMetal.y));
+  radiance = mix(vec3(sw), tint * min(lum, 3.0 * sw), 0.25);
+}
+#include <lights_fragment_end>`);
+  };
+  wallM.customProgramCacheKey = () => 'worn|wall';
   wallM.color.set(WALL.color);
-  Object.assign(wallM, {anisotropy: 0, clearcoat: 0, roughness: WALL.rough, envMapIntensity: WALL.env});
+  Object.assign(wallM, {metalness: 1, anisotropy: 0, clearcoat: 0, roughness: WALL.rough, envMapIntensity: WALL.env, normalMap: brushTexture(), normalScale: new THREE.Vector2(WALL.brush, WALL.brush)});
   const body = group(0, 0, 0);
   body.add(mesh(extrudeXY(right, wall, 0.06, 28), wallM, 0, 0, zc));
   body.add(mesh(extrudeXY(left, wall, 0.06, 28), wallM, 0, 0, -zc));
