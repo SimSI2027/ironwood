@@ -14,7 +14,7 @@ function cloneMat(m) {
 }
 /**
  * Chain a look hook onto a material: uDim scales the lit result (dimming keeps the material,
- * just darker), uRim adds a soft brass fresnel rim (selected assembly).
+ * just darker), uRim lifts it (the selected assembly: a 15% exposure lift, no edge halo).
  */
 function look(m, U) {
   const base = m.onBeforeCompile;
@@ -25,13 +25,8 @@ function look(m, U) {
     sh.uniforms.uRim = U.rim;
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uDim;\nuniform float uRim;')
-      .replace(
-        '#include <emissivemap_fragment>',
-        `#include <emissivemap_fragment>
-        totalEmissiveRadiance += vec3(0.95, 0.66, 0.26) * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.5) * uRim;`,
-      )
       .replace('#include <opaque_fragment>', // every part is soft-capped under the bloom threshold (0.9): pins, bead and brass never glow
-        'outgoingLight = min(outgoingLight * uDim, vec3(mix(64.0, 0.3, clamp((1.0 - uDim) / 0.7, 0.0, 1.0))));\n' + NO_BLOOM + '\n#include <opaque_fragment>',
+        'outgoingLight = min(outgoingLight * uDim * (1.0 + 0.15 * uRim), vec3(mix(64.0, 0.3, clamp((1.0 - uDim) / 0.7, 0.0, 1.0))));\n' + NO_BLOOM + '\n#include <opaque_fragment>',
       );
   };
   m.customProgramCacheKey = () => key + '|look';
@@ -159,12 +154,12 @@ export class Asm {
   }
 
   /**
-   * d: dim 0..1 (1 = 30% brightness, 0.5 opacity, own material kept). rim: brass rim 0..1.
+   * d: dim 0..1 (1 = 30% brightness, 0.5 opacity, own material kept). rim: selection 0..1 (+15% exposure).
    * xr: x-ray 0..1 for parts added with xray (15% opacity, brass edge lines).
    */
   setLook(d, rim = 0, xr = 0) {
     this.U.dim.value = 1 - 0.7 * d;
-    this.U.rim.value = 0.45 * rim;
+    this.U.rim.value = rim;
     for (const m of this.materials) {
       const a = (1 - 0.5 * d) * (this.xrayMats.has(m) ? 1 - 0.85 * xr : 1);
       const t = a < 0.999;

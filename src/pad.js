@@ -9,20 +9,24 @@ export function buildPad() {
   const M = A.M;
   const mid = [(HEEL[0] + TOE[0]) / 2, (HEEL[1] + TOE[1]) / 2];
   const len = Math.hypot(HEEL[0] - TOE[0], HEEL[1] - TOE[1]);
-  const frame = group(mid[0] - 0.03, mid[1], 0);
+  const frame = group(mid[0], mid[1], 0); // on the butt plane: flush, no gap
   frame.rotation.z = Math.atan2(TOE[0] - HEEL[0], HEEL[1] - TOE[1]); // tilt of the butt line
   A.group.add(frame);
   const hl = len / 2;
   const W = BUTT_W; // the butt outline is an oval, half-height hl, half-width W
   const across = (y, a, w) => w * Math.max(0, 1 - Math.abs(y / a) ** SE) ** (1 / SE); // half-width at y
 
-  // --- spacer plate: the butt outline, 2.6 mm thick
-  const spacer = mesh(extrudeYZ(ovalShape(hl, W), 0.26, 0.04, 72).translate(-0.26, 0, 0), M.polymer);
+  // --- spacer plate: the stock's own last ring (64 points), 2.6 mm thick, square edges so the wood,
+  // spacer and pad read as one surface
+  const NR = 64;
+  const spacer = mesh(new THREE.ExtrudeGeometry(ovalShape(hl, W, NR), {depth: 0.26, bevelEnabled: false}).rotateY(Math.PI / 2).translate(-0.26, 0, 0), M.polymer);
   A.add(spacer, 'spacer plate', {parent: frame, ex: [3.2, 0, 0], delay: 0.3});
 
-  // --- pad body: the same outline, 2.4 cm deep, every back edge (heel and toe too) rounded 5 mm
+  // --- pad body: the same outline, 2.4 cm deep behind the spacer, every back edge (heel and toe too)
+  // rounded 5 mm. It runs 5 mm on into the spacer and wood, so its front bevel is buried and its full
+  // outline starts exactly at the spacer's back face.
   const BEV = 0.5;
-  const body = group(0, 0, 0, mesh(extrudeYZ(ovalShape(hl, W), 2.4, BEV, 72).translate(-2.66, 0, 0), M.rubber));
+  const body = group(0, 0, 0, mesh(extrudeYZ(ovalShape(hl, W, NR), 2.4 + BEV, BEV, 72).translate(-2.66, 0, 0), M.rubber));
   // back face ribs, each as wide as the flat back at its height
   const ribs = [];
   for (let k = -5; k <= 5; k++) ribs.push(at(rbox(0.16, 0.42, 1.8 * across(k * 1.08, hl - BEV, W - BEV), 0.07), -2.7, k * 1.08, 0));

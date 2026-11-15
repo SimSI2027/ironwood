@@ -18,7 +18,7 @@ export const widthAt = (x) => {
 // half-width widthAt. At the joint T and B are the receiver's rear top and bottom, so the heights match.
 const JOINT = [-20.5, 0.42, -5.0]; // receiver rear: x, top (wall line -0.2 + crown 0.62), bottom
 export const SE = 2.4; // cross-section exponent: an oval, a little fuller than an ellipse
-const FIL = 0.3; // rounded edge (heel, toe and sides) where the wood meets the pad
+const FIL = 0; // no rolled edge where the wood meets the pad: spacer and pad continue the butt outline flush
 // belly: the pistol-grip curve behind the trigger guard, then one smooth line to the toe (no notch)
 const BP = new THREE.SplineCurve(
   [[-20.5, -5.0], [-21.3, -6.0], [-22.6, -8.4], [-24.4, -11.4], [-26.2, -13.2], [-28.4, -14.0], [-31.5, -14.6], [-35.5, -15.8], [-39.5, -17.3], [-42.75, -18.45]].map(([x, y]) => new THREE.Vector2(x, y)),

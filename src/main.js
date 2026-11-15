@@ -755,7 +755,7 @@ async function main() {
     gun.position.set(-12 - RECOIL.kick * rk + pv.x - (pv.x * Math.cos(th) - pv.y * Math.sin(th)), pv.y - (pv.x * Math.sin(th) + pv.y * Math.cos(th)), 0);
 
     // dimming
-    // dimming keeps each part's material (30% brightness, half opacity); the selection gets a brass rim
+    // dimming keeps each part's material (30% brightness, half opacity); the selection is lifted 15%
     const kd = still ? 1 : 1 - Math.exp(-dt * 8);
     asms.forEach((a, i) => {
       dim[i] = ease1(dim[i], focus < 0 || focus === i ? 0 : 1, kd);
