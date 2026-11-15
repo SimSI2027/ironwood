@@ -99,38 +99,37 @@ async function main() {
   // --- UI
   const ui = el('div', 'iw', null, app);
   const head = el('div', 'iw-head', '<span class="iw-brand">IRONWOOD <b>Mk I</b></span><span class="iw-dot">·</span><span class="iw-sub">Exploded view. Drag, scroll, take it apart.</span>', ui);
-  const qSeg = el('span', 'iw-q', '<button data-t="high">High</button><button data-t="low">Low</button>', head);
+  const qSeg = el('span', 'iw-q', '<button data-t="high">High</button><button data-t="med">Med</button><button data-t="low">Low</button>', head);
   el('div', 'iw-rule', null, ui);
   const hint = el('div', 'iw-hint', null, ui);
-  const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${S.tier} quality${dropped.map((k) => ' · ' + k).join('')} · ${gpuName}`);
+  const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${{high: 'HIGH', med: 'MEDIUM', low: 'LOW'}[S.tier]} quality${dropped.map((k) => ' · ' + k).join('')} · ${gpuName}`);
   const dropped = []; // adaptive quality steps taken this visit
 
-  // --- quality tier: ?q=high|low forces it; then a remembered header choice; then a discrete GPU
-  // (WebGL renderer string) starts high; else phones start low and the rest run a 1 s probe of the
-  // real per-frame render cost (render + 1 px readback to sync the GPU), high when it averages < 12 ms
-  const forced = ['high', 'low'].includes(q.get('q')) ? q.get('q') : null;
+  // --- quality tier: ?q=high|med|low forces it; then a remembered header choice; phones start LOW;
+  // a renderer string naming NVIDIA RTX/GTX, Radeon RX, Arc or Apple M-series starts HIGH; everything
+  // else (Radeon(TM) Graphics, Intel UHD/Iris, unknown strings) starts MEDIUM
+  const TIERS = ['high', 'med', 'low'];
+  const forced = TIERS.includes(q.get('q')) ? q.get('q') : null;
   let stored = null;
   try {
     stored = localStorage.getItem('ironwood.q');
   } catch (e) {}
-  if (!['high', 'low'].includes(stored)) stored = null;
+  if (!TIERS.includes(stored)) stored = null;
   const gl = S.renderer.getContext();
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   const gpu = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
   // the header stats line shows the GPU: the model inside ANGLE's string, else the raw string
   const gpuName = (/^ANGLE \([^,]+, (.+?)(?: \(0x[0-9a-f]+\))?(?: Direct3D.*| OpenGL.*| Vulkan.*)?, [^,]+\)$/i.exec(gpu)?.[1] || gpu).trim();
-  const discrete = /nvidia|geforce|quadro|rtx|gtx|radeon\s*(rx|pro|r9|vii)|arc\(tm\)\s*a\d|intel.*\barc\b/i.test(gpu);
+  const discrete = /\b(rtx|gtx)\b|radeon\s*rx\b|\barc\b|apple\s*m\d/i.test(gpu);
   const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
-  const pre = forced || stored || (discrete ? 'high' : phone ? 'low' : null);
-  S.setTier(pre || 'high');
-  let probe = pre ? null : {n: 0, t0: 0, dts: []};
+  const by = forced ? 'url' : stored ? 'stored' : phone ? 'phone' : discrete ? 'gpu' : 'default';
+  S.setTier(forced || stored || (phone ? 'low' : discrete ? 'high' : 'med'));
   const px = new Uint8Array(4);
-  window.__PROBE = {gpu, discrete, tier: S.tier, by: forced ? 'url' : stored ? 'stored' : discrete ? 'gpu' : phone ? 'phone' : 'probe'};
+  window.__PROBE = {gpu, discrete, tier: S.tier, by};
   const showQ = () => [...qSeg.children].forEach((b) => b.classList.toggle('on', b.dataset.t === S.tier));
   qSeg.onclick = (e) => {
     const t = e.target.dataset?.t;
     if (!t) return;
-    probe = null;
     S.setTier(t);
     try {
       localStorage.setItem('ironwood.q', t);
@@ -717,7 +716,7 @@ async function main() {
   let lastDraw = 0;
   const slow = []; // [t, ms] of consecutive drawn frames, last second
   const STEP = {ssao: 'no SSAO', reflection: 'no reflection', dpr: 'DPR 1'};
-  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, S.tier === 'high' ? 1 : 0, hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
+  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, TIERS.indexOf(S.tier), hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
   const camOf = () => [...camera.position.toArray(), ...camera.quaternion.toArray(), camera.aspect];
   const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {
@@ -725,20 +724,6 @@ async function main() {
     if (turning && controls.autoRotate && raw < 30 && !still) return (drewLast = false), requestAnimationFrame(tick);
     const dt = Math.min(0.05, raw / 1000);
     prev = now;
-    if (probe) {
-      // skip the first 10 frames (shader compiles, shadow first-render), then sample one second
-      probe.n++;
-      if (probe.n === 11) probe.t0 = now;
-      if (probe.t0 && now - probe.t0 > 1000) {
-        const avg = probe.dts.reduce((a, b) => a + b, 0) / Math.max(1, probe.dts.length);
-        S.setTier(avg < 12 ? 'high' : 'low');
-        Object.assign(window.__PROBE, {avg: +avg.toFixed(1), frames: probe.dts.length, tier: S.tier});
-        probe = null;
-        setHint();
-        showQ();
-      }
-    }
-
     if (tour.active) {
       const k = tour.at((now - tour.t0) / 1000);
       st.explode = k.explode;
@@ -861,20 +846,15 @@ async function main() {
     const cm = camOf();
     const moved = !same(lastSig, sg, 1e-6);
     const camMoved = !same(lastCam, cm, 1e-5);
-    const draw = moved || camMoved || still || !!probe || S.renderer.shadowMap.needsUpdate;
+    const draw = moved || camMoved || still || S.renderer.shadowMap.needsUpdate;
     turning = !moved && camMoved && controls.autoRotate;
     pickDirty = draw;
     if (!draw) return (drewLast = false), requestAnimationFrame(tick);
     lastSig = sg;
     lastCam = cm;
     perf?.frameStart();
-    if (probe && probe.t0) {
-      const t0 = performance.now();
-      S.render();
-      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-      probe.dts.push(performance.now() - t0);
-    } else S.render();
-    if (drewLast && !probe && !still && window.__READY) {
+    S.render();
+    if (drewLast && !still && window.__READY) {
       slow.push([now, now - lastDraw]);
       while (slow[0][0] < now - 1000) slow.shift();
       if (now - slow[0][0] > 900 && slow.reduce((a, f) => a + f[1], 0) / slow.length > 20) {
@@ -907,7 +887,7 @@ async function main() {
     if (!g) {
       // the outline pass's depth and mask programs: one outline render into the composer's buffer
       // (off screen) while nothing moves, instead of a stall on the first hovered part
-      if (S.tier !== 'high') return;
+      if (S.tier === 'low') return;
       const keep = S.outline.selectedObjects;
       S.outline.selectedObjects = [asms[0].parts[0].obj];
       S.outline.render(S.renderer, S.composer.writeBuffer, S.composer.readBuffer, 0, false);

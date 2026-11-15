@@ -202,7 +202,7 @@ export function createStage(canvas) {
   const resize = () => {
     const w = canvas.clientWidth || innerWidth;
     const h = canvas.clientHeight || innerHeight;
-    const pr = S.cut.dpr ? 1 : Math.min(devicePixelRatio || 1, S.tier === 'low' ? 1.5 : 2);
+    const pr = S.cut.dpr ? 1 : Math.min(devicePixelRatio || 1, {high: 2, med: 1.25, low: 1}[S.tier]);
     hullMat.uniforms.uK.value = (1.8 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h; // ~1.8 px
     size.w = w;
     size.h = h;
@@ -235,10 +235,10 @@ export function createStage(canvas) {
   let sel = null;
   const select = (h) => {
     sel = h;
-    outline.selectedObjects = h && S.tier === 'high' ? [h] : [];
+    outline.selectedObjects = h && S.tier !== 'low' ? [h] : [];
     hulls.forEach((m) => m.removeFromParent());
     hulls.length = 0;
-    if (!h || S.tier === 'high') return;
+    if (!h || S.tier !== 'low') return;
     const ms = [];
     h.traverse((o) => o.isMesh && ms.push(o));
     for (const o of ms) {
@@ -253,7 +253,7 @@ export function createStage(canvas) {
     floorR.visible = !(S.tier === 'low' && innerWidth < 700);
     catcher.visible = true;
   }
-  /** high: 4096 shadow, GTAO, brass bloom, outline pass, DPR <= 2. low: 1024 shadow, no post, DPR <= 1.5. */
+  /** high: 4096 shadow, GTAO, bloom, outline, reflection 1024, DPR <= 2. med: 1024 shadow, no GTAO, reflection 512, DPR <= 1.25. low: 1024 shadow, no post, DPR 1. */
   const setTier = (t) => {
     S.tier = t;
     const hi = t === 'high';
@@ -266,6 +266,7 @@ export function createStage(canvas) {
     renderer.shadowMap.needsUpdate = true;
     showFloors();
     floorR.getRenderTarget().setSize(hi ? 1024 : 512, hi ? 1024 : 512);
+    ao.enabled = hi && !S.cut.ssao;
     resize();
     select(sel);
   };
@@ -276,7 +277,7 @@ export function createStage(canvas) {
    */
   const degrade = () => {
     const steps = [
-      ['ssao', () => S.tier === 'high' && ao.enabled, () => (ao.enabled = false)],
+      ['ssao', () => ao.enabled, () => (ao.enabled = false)],
       ['reflection', () => floorR.visible, () => (floorR.material.uniforms.uStrength.value = 0)],
       ['dpr', () => renderer.getPixelRatio() > 1, () => 0],
     ];
@@ -291,6 +292,6 @@ export function createStage(canvas) {
     return null;
   };
   const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, key, floor: floorR, cut: {}, tier: 'high'};
-  S.render = () => (S.tier === 'high' ? composer.render() : renderer.render(scene, camera));
+  S.render = () => (S.tier !== 'low' ? composer.render() : renderer.render(scene, camera));
   return S;
 }
