@@ -1007,12 +1007,9 @@ async function main() {
     const flip = (t) => mats.forEach((m) => ((m.transparent = t), (m.needsUpdate = true)));
     flip(true);
     compile(g);
-    if (S.tier === 'low') compile(g, null);
     flip(false);
     setTimeout(() => warmTransparent(groups), 60);
   }
-  // the low tier draws the gun straight to the screen: its tone-mapped variants too
-  if (S.tier === 'low') [gun, ...scene.children.filter((o) => o !== gun && o.isMesh)].forEach((o) => compile(o, null));
   await Promise.all(jobs);
   MARKS.shaders = performance.now();
   load.remove();

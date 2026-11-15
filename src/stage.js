@@ -7,6 +7,9 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {OutlinePass} from 'three/addons/postprocessing/OutlinePass.js';
 import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {SMAAPass} from 'three/addons/postprocessing/SMAAPass.js';
+import {FullScreenQuad} from 'three/addons/postprocessing/Pass.js';
+import {CopyShader} from 'three/addons/shaders/CopyShader.js';
 import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {Reflector} from 'three/addons/objects/Reflector.js';
@@ -49,9 +52,36 @@ const BRASS_HIGHPASS = `
     gl_FragColor = mix(vec4(defaultColor, defaultOpacity), t, a);
   }`;
 
+/**
+ * The scene pass draws into its own multisampled HDR target (8 samples HIGH, 4 MED, none LOW) and
+ * resolves into the post chain, whose ping-pong buffers stay single-sampled (two MSAA buffers at
+ * DPR 2 would cost twice the memory for nothing: only geometry edges need the samples).
+ */
+class MSRenderPass extends RenderPass {
+  constructor(scene, camera) {
+    super(scene, camera);
+    this.ms = new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType, samples: 4});
+    this.quad = new FullScreenQuad(new THREE.ShaderMaterial({...CopyShader, uniforms: THREE.UniformsUtils.clone(CopyShader.uniforms), blending: THREE.NoBlending, depthTest: false, depthWrite: false}));
+  }
+  setSamples(n) {
+    if (this.ms.samples === n) return;
+    this.ms.samples = n;
+    this.ms.dispose();
+  }
+  setSize(w, h) {
+    this.ms.setSize(w, h);
+  }
+  render(renderer, writeBuffer, readBuffer, dt, mask) {
+    super.render(renderer, writeBuffer, this.ms, dt, mask);
+    this.quad.material.uniforms.tDiffuse.value = this.ms.texture;
+    renderer.setRenderTarget(readBuffer);
+    this.quad.render(renderer);
+  }
+}
+
 export function createStage(canvas) {
-  // antialias on: the low tier draws straight to the canvas with no composer
-  const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: false});
+  // every tier draws through the composer (MSAA scene pass, SMAA last), so the canvas itself needs none
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: false, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: false});
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
@@ -168,9 +198,10 @@ export function createStage(canvas) {
   // not added: the floor shader draws the one contact shadow (the key light's cast shadow sat
   // off to one side as a second one)
 
-  const target = new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType, samples: 4});
+  const target = new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType});
   const composer = new EffectComposer(renderer, target);
-  composer.addPass(new RenderPass(scene, camera));
+  const scenePass = new MSRenderPass(scene, camera);
+  composer.addPass(scenePass);
   // SSAO (GTAO) on the gun only: the floors are hidden from its normal/depth pass, which also
   // keeps the Reflector from re-rendering the scene a second time inside it
   const ao = new GTAOPass(scene, camera, 4, 4);
@@ -195,20 +226,26 @@ export function createStage(canvas) {
   const outline = new OutlinePass(new THREE.Vector2(4, 4), scene, camera);
   outline.visibleEdgeColor.set(0xe2b65c);
   outline.hiddenEdgeColor.set(0x6b5222);
+  // full resolution (not the default half), about 2 px wide; SMAA smooths it with everything else
+  outline.downSampleRatio = 1;
   outline.edgeStrength = 4.5;
-  outline.edgeThickness = 1.2;
+  outline.edgeThickness = 1.0;
   outline.edgeGlow = 0.0;
   composer.addPass(outline);
   const vig = new ShaderPass(Vignette);
   composer.addPass(vig);
   composer.addPass(new OutputPass());
+  // SMAA last, on the tone-mapped sRGB image: on every tier, the only AA on LOW
+  const smaa = new SMAAPass();
+  composer.addPass(smaa);
+  const maxSamples = renderer.getContext().getParameter(renderer.getContext().MAX_SAMPLES) || 4;
 
   const size = {w: 1, h: 1};
   const resize = () => {
     const w = canvas.clientWidth || innerWidth;
     const h = canvas.clientHeight || innerHeight;
-    const pr = S.cut.dpr ? 1 : Math.min(devicePixelRatio || 1, {high: 2, med: 1.25, low: 1}[S.tier]);
-    hullMat.uniforms.uK.value = (1.8 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h; // ~1.8 px
+    const pr = S.cut.dpr ? 1 : Math.min(devicePixelRatio || 1, {high: 2, med: 1.5, low: 1}[S.tier]);
+    hullMat.uniforms.uK.value = (2 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / h; // 2 px
     size.w = w;
     size.h = h;
     renderer.setPixelRatio(pr);
@@ -225,7 +262,7 @@ export function createStage(canvas) {
     v.copy(p).project(camera);
     return {x: (v.x * 0.5 + 0.5) * size.w, y: (-v.y * 0.5 + 0.5) * size.h, visible: v.z < 1};
   };
-  // --- low tier: no post; the hover outline is an inverted hull.
+  // --- low tier: no SSAO, bloom or outline pass; the hover outline is an inverted hull, 2 px at full resolution.
   const vigEl = document.createElement('div');
   vigEl.className = 'iw-vig on'; // one CSS vignette for both tiers (the canvas is transparent)
   canvas.after(vigEl);
@@ -258,7 +295,7 @@ export function createStage(canvas) {
     floorR.visible = !(S.tier === 'low' && innerWidth < 700);
     catcher.visible = true;
   }
-  /** high: 4096 shadow, GTAO, bloom, outline, reflection 1024, DPR <= 2. med: 1024 shadow, no GTAO, reflection 512, DPR <= 1.25. low: 1024 shadow, no post, DPR 1. */
+  /** high: 4096 shadow, GTAO, bloom, outline, 8x MSAA, reflection 1024, DPR <= 2. med: 1024 shadow, no GTAO, 4x MSAA, reflection 512, DPR <= 1.5. low: 1024 shadow, SMAA only, DPR 1. SMAA last on all three. */
   const disposeShadow = () => {
     key.shadow.map?.dispose();
     key.shadow.mapPass?.dispose();
@@ -276,6 +313,8 @@ export function createStage(canvas) {
     showFloors();
     floorR.getRenderTarget().setSize(hi ? 1024 : 512, hi ? 1024 : 512);
     ao.enabled = hi && !S.cut.ssao;
+    scenePass.setSamples(Math.min(maxSamples, {high: 8, med: 4, low: 0}[t]));
+    bloom.enabled = outline.enabled = t !== 'low';
     resize();
     select(sel);
   };
@@ -304,6 +343,6 @@ export function createStage(canvas) {
     return null;
   };
   const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, key, cool, floor: floorR, cut: {}, tier: 'high'};
-  S.render = () => (S.tier !== 'low' ? composer.render() : renderer.render(scene, camera));
+  S.render = () => composer.render();
   return S;
 }
