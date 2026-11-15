@@ -1,6 +1,6 @@
 # Ironwood Mk I
 
-An interactive 3D exploded view of a walnut-stocked rifle, built entirely in code with three.js. No models or textures are loaded: every part, material and shader is procedural, and the built page is one self-contained HTML file.
+An interactive 3D exploded view of a walnut-stocked pump-action shotgun, built entirely in code with three.js. No models or textures are loaded: every part, material and shader is procedural, and the built page is one self-contained HTML file.
 
 **Live:** https://simsi2027.github.io/ironwood/
 
