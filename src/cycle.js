@@ -238,10 +238,11 @@ export function createShells() {
   //  ride    c < 0.425       the bolt carries it back (base on the bolt face)
   //  kick    0.425-0.437     drops onto the port sill (bottom at y -1.35) and slides until its right
   //                          rim touches the wall plane z 1.55
-  //  pivot   0.437-0.47      yaws mouth-out about that rim point on the sill edge, accelerating to
+  //  pivot   0.437-0.47      yaws base-out about its front rim point on the sill edge, accelerating to
   //                          the flight's spin rate (87 deg); every point stays inside the port's x/y
-  //  flight  0.47-0.64       30 cm across, 12 cm up, down to the floor: position linear across,
-  //                          parabola up; 2.5 spins and one slow tumble, both linear in time
+  //  flight  0.47-0.64       30 cm straight out toward +z (the camera side), base first, axis level,
+  //                          0.8 cm up at most (its top stays under the receiver top 1.62), then down
+  //                          to the floor; 2.5 yaw spins and a roll about its own axis, linear in time
   //  bounce  0.64-0.69 (3 cm) · roll 0.69-0.77 (4 cm, on its side) · settle · fade 0.80-0.92
   const SILL = -1.35;
   const WALL = 1.55;
@@ -257,13 +258,13 @@ export function createShells() {
   const yPort = SILL + R_SH;
   const yLand = FLOOR_Y + 1.0; // on its side on the floor (brass rim radius 1.0); the gun sits at y 0
   const RANGE = 30;
-  const PEAK = 12;
-  const dH = new THREE.Vector3(-0.3, 0, 1).normalize(); // out of the port, a little rearward
+  const PEAK = 0.8;
+  const dH = new THREE.Vector3(0, 0, 1); // straight out of the port, toward the camera
   const euler = new THREE.Euler(0, 0, 0, 'YZX');
   const v3 = new THREE.Vector3();
-  /** Shell centre for a yaw psi about the rim point Q = (xb, yPort, WALL). */
+  /** Shell centre for a yaw psi (positive: base toward +z) about the front rim point Q = (xb + L, yPort, WALL). */
   const aboutRim = (xb, L, psi, out) =>
-    out.set(xb + (L / 2) * Math.cos(psi) - R_SH * Math.sin(psi), yPort, WALL - (L / 2) * Math.sin(psi) - R_SH * Math.cos(psi));
+    out.set(xb + L - (L / 2) * Math.cos(psi) - R_SH * Math.sin(psi), yPort, WALL + (L / 2) * Math.sin(psi) - R_SH * Math.cos(psi));
   function poseEject(s, c) {
     const L = s.userData.len;
     const xb = face(C_K);
@@ -280,11 +281,11 @@ export function createShells() {
       return s.position.set(xb + L / 2, yPort * k, (WALL - R_SH) * k);
     }
     if (c < C_F) {
-      const psi = -TH1 * ((c - C_P) / (C_F - C_P)) ** 2;
+      const psi = TH1 * ((c - C_P) / (C_F - C_P)) ** 2;
       s.rotation.set(0, psi, 0);
       return aboutRim(xb, L, psi, s.position);
     }
-    const psi0 = -TH1;
+    const psi0 = TH1;
     const p0 = aboutRim(xb, L, psi0, v3);
     // parabola through the release (y0), 12 cm over it, landing on the floor at tau 1
     const d = yLand - p0.y;
@@ -293,11 +294,11 @@ export function createShells() {
     if (c < C_L) {
       const tau = (c - C_F) / (C_L - C_F);
       s.position.set(p0.x + dH.x * RANGE * tau, p0.y + B * tau - A * tau * tau, p0.z + dH.z * RANGE * tau);
-      euler.set(0, psi0 - SPIN * tau, 2 * Math.PI * tau);
+      euler.set(2 * Math.PI * tau, psi0 + SPIN * tau, 0);
       return s.rotation.copy(euler);
     }
     // on the floor: yaw frozen where it landed, axis level
-    const psiL = psi0 - SPIN;
+    const psiL = psi0 + SPIN;
     const land = v3.set(p0.x + dH.x * RANGE, yLand, p0.z + dH.z * RANGE);
     const tb = clamp01((c - C_L) / (C_B - C_L));
     const hop = 3 * 4 * tb * (1 - tb);
