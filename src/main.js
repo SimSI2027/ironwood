@@ -42,6 +42,10 @@ function el(tag, cls, html, parent) {
   return e;
 }
 
+// ?render: the film. The UI is hidden, the live loop never starts, and window.seek(seconds) poses and draws
+// one frame as a pure function of film time (the cutaway skill's capture.mjs steps it at 60 fps)
+const film = q.has('render');
+
 async function main() {
   await loadFonts();
   MARKS.fonts = performance.now();
@@ -310,6 +314,7 @@ async function main() {
   function usable() {
     const W = S.size.w;
     const H = S.size.h;
+    if (film) return {l: 0, r: W, t: 0, b: H}; // the film hides the UI: the whole frame is usable
     const r = {l: 0, r: W, t: Math.max(head.getBoundingClientRect().bottom, hint.offsetParent ? hint.getBoundingClientRect().bottom : 0) + 6, b: dock.getBoundingClientRect().top - 6};
     const pb = document.querySelector('.iw-perf')?.getBoundingClientRect();
     if (pb && pb.width) {
@@ -1167,7 +1172,75 @@ async function main() {
   await Promise.all(jobs);
   MARKS.shaders = performance.now();
   load.remove();
-  requestAnimationFrame(tick);
+  if (film) startFilm();
+  else requestAnimationFrame(tick);
+  /**
+   * The 12 s film: hero sway 2 s; FIRE at 0.1x with the x-ray (5.1 s); the eject in slow motion (PUMP
+   * 0.30-0.55 at 0.25x, 1.7 s); the pump runs home (0.5 s); explode to 1 and back (2 s); the hero (0.7 s).
+   */
+  function startFilm() {
+    ui.style.display = 'none';
+    S.renderer.shadowMap.autoUpdate = true;
+    const A = 2, B = A + (0.3 * FULL_S) / 0.1, C = B + (0.25 * FULL_S) / 0.25, D = C + 0.5, E = D + 2.0, END = 12;
+    const deg = THREE.MathUtils.degToRad;
+    const hero = (a) => frame([gun, ground()], swayDir(HERO_DIR, deg(a)));
+    const lin = (a, b, x) => clamp01((x - a) / (b - a));
+    function pose(T) {
+      let t = 0;
+      let e = 0;
+      let x = 0;
+      let cam;
+      if (T < A) cam = hero(-10 + 20 * ease(T / A));
+      else if (T < B) {
+        t = 0.3 * lin(A, B, T);
+        x = ease(lin(A, A + 0.4, T));
+      } else if (T < C) {
+        t = 0.3 + 0.25 * lin(B, C, T);
+        x = 1;
+      } else if (T < D) {
+        t = 0.55 + 0.45 * ease(lin(C, D, T));
+        x = 1 - ease(lin(C, D, T));
+      } else if (T < E) {
+        const u = T - D;
+        e = u < 0.8 ? ease(u / 0.8) : u < 1.1 ? 1 : 1 - ease((u - 1.1) / 0.9);
+      }
+      if (t >= 1) t = 0;
+      st.t = t;
+      st.explode = e;
+      st.fired = true;
+      poseAll(e, channelsAt(t, true));
+      shells.pose(t, true, t > 0 && e < 0.02);
+      fx.pose(t, e < 0.02);
+      recoil(e < 0.02 ? recoilAt(t) : 0);
+      S.floor.position.y = FLOOR_Y + (FLOOR_LOW - FLOOR_Y) * smr(0.3, 0.75, e);
+      const xt = xrayAt(t);
+      asms.forEach((a, i) => a.setLook(0, 0, x * (xt[a.key] || 0)));
+      const fl = 1 + 0.3 * smr(0.8, 0.9, e);
+      S.key.intensity = 3.0;
+      S.cool.intensity = 0.75 * fl;
+      S.fill.intensity = 0.35 * fl;
+      S.under.intensity = 0.35 * fl;
+      if (!cam) {
+        if (T < C) cam = blend(hero(10), clockCam(t), ease(lin(A, A + 0.7, T)));
+        else if (T < D) cam = blend(clockCam(Math.min(t, 0.999)), hero(0), ease(lin(C, D, T)));
+        else if (T < E) cam = frame([gun, ground()], HERO_DIR);
+        else cam = hero(6 * ease(lin(E, END, T)));
+      }
+      controls.target.copy(cam.t);
+      camera.position.copy(cam.p);
+      camera.lookAt(cam.t);
+      camera.updateMatrixWorld();
+    }
+    S.resize();
+    ckeys = null;
+    window.DURATION = END;
+    window.FPS = 60;
+    window.seek = (T) => {
+      pose(Math.min(END, Math.max(0, T)));
+      S.render();
+    };
+    window.__READY = true;
+  }
   window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame, clockCam, partByName, TICKS, tickAt, subjectPts, usable, clockSubject, autoSubject, view, direct, get hovered() { return hovered; }}; // controls + frame: for the hero and check shots
 }
 
