@@ -116,7 +116,7 @@ export function buildTrigger() {
 
   // --- hammer spring on its plunger
   const hsp = group(0, -4.98, 0);
-  hsp.add(mesh(spring(3.6, 0.22, 0.04, 15, {seg: 16, radial: 6}), M.brass, -18.3, 0, 0));
+  hsp.add(mesh(spring(3.6, 0.22, 0.07, 15, {seg: 16, radial: 6}), M.brass, -18.3, 0, 0));
   hsp.add(mesh(rodX(-18.9, -14.2, 0.1, 0.03, 14), M.steelBright));
   hsp.add(mesh(rodX(-14.4, -13.8, 0.2, 0.06, 18), M.steelBright));
   A.add(hsp, 'hammer spring', {ex: [-2.5, -3.2, 0], scaleX: 1.2, delay: 0.25});

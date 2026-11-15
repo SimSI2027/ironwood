@@ -89,7 +89,7 @@ export function buildForend() {
     ],
     0.1,
   );
-  const barGeo = extrudeXY(barShape, 0.14, 0.035, 12);
+  const barGeo = extrudeXY(barShape, 0.2, 0.04, 12); // 2 mm: >= 1.5 px at the default view (8.6 px/cm at 1189 px wide)
   const yBar = MAG_Y + 0.3;
   const right = mesh(barGeo, M.steelSatin, 0, yBar, BAR_Z);
   const left = mesh(barGeo, M.steelSatin, 0, yBar, -BAR_Z);

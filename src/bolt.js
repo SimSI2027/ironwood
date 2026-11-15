@@ -117,7 +117,7 @@ export function buildBolt() {
   // carrier dog and its pin on the left
   const dog = extrudeXY(rpoly([[-1.4, -0.15], [0.3, -0.15], [0.5, 0.3], [-1.2, 0.35]], 0.12), 0.16, 0.04);
   el.add(mesh(dog, M.steelBright, -1.0, 0.25, -1.12));
-  el.add(mesh(pinZ(0.5, 0.08, 12), M.brass, -0.4, 0.3, -1.12));
+  el.add(mesh(pinZ(0.5, 0.1, 16), M.brass, -0.4, 0.3, -1.12));
   A.add(el, 'elevator', {pumpRot: [0, 0, -0.3], drive: 'elev', ex: [0, -6.8, 1.0], rot: [-0.55, 0, 0], delay: 0.4});
   return A;
 }

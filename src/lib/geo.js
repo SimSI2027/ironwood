@@ -322,7 +322,7 @@ export function rrectSection(hn, hz, r, seg = 4) {
 }
 
 /** Coil spring along +X: closed ground ends, real helix. */
-export function spring(len, R, wire, turns, {endTurns = 1.25, seg = 8, radial = 5} = {}) {
+export function spring(len, R, wire, turns, {endTurns = 1.25} = {}) {
   const pitchEnd = wire * 2.05;
   const body = turns - 2 * endTurns;
   const pitch = (len - 2 * endTurns * pitchEnd - wire * 2) / body;
@@ -338,7 +338,8 @@ export function spring(len, R, wire, turns, {endTurns = 1.25, seg = 8, radial = 
       return out.set(xAt(k), R * Math.cos(a), R * Math.sin(a));
     }
   }
-  return new THREE.TubeGeometry(new Helix(), Math.ceil(turns * Math.min(seg, 8)), wire, Math.min(radial, 4), false);
+  // 24 segments per turn, 12 round the wire: no polygonal coil or flat-sided wire at any close-up
+  return new THREE.TubeGeometry(new Helix(), Math.ceil(turns * 24), wire, 12, false);
 }
 
 /** Knurled cylinder along +X (straight knurl): n ridges. */

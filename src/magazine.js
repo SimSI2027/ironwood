@@ -38,7 +38,7 @@ export function buildMagazine() {
 
   // --- magazine spring: real helix, closed ground ends, stretches when fanned out
   const L = 40.9;
-  const sp = mesh(spring(L, 0.78, 0.085, 46, {seg: 20, radial: 6}), M.brass, 2.7, MAG_Y, 0);
+  const sp = mesh(spring(L, 0.78, 0.1, 46, {seg: 20, radial: 6}), M.brass, 2.7, MAG_Y, 0);
   A.add(sp, 'magazine spring', {ex: [0, -3.4, 0], scaleX: 1.22, delay: 0.1});
 
   // --- follower: brass cup, domed shell face, spring seat

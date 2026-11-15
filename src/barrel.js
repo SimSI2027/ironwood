@@ -53,7 +53,7 @@ export function buildBarrel() {
     const top = ribY - 0.08;
     const base = barrelR(x) - 0.05;
     const h = top - base;
-    ribGeo.push(at(rbox(0.55, h, 0.5, 0.06), x, base + h / 2, 0));
+    ribGeo.push(at(rbox(0.7, h, 0.6, 0.06), x, base + h / 2, 0));
   }
   // front ramp
   ribGeo.push(at(rbox(1.2, 0.35, 0.5, 0.08), r0 + 0.4, 1.62, 0, 0, 0, -0.35));
