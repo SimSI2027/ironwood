@@ -277,6 +277,14 @@ async function main() {
     const hi = 1 - (2 * top) / h;
     return [lo, Math.max(hi, lo + 0.3)]; // the dock (cycle panel included) is never part of the usable area
   }
+  /** The NDC window the gun must stay inside: 8% of the viewport clear on each side, header and dock excluded; or the central share `inner`. */
+  function windowOf(inner = 0) {
+    const m = 0.16; // 8% of the viewport on each side, in NDC units
+    const [b0, b1] = band();
+    const a0 = b0 - 12 / S.size.h; // the dock's top edge (band() keeps 6 px clear of it)
+    const my = ((1 - a0) * (1 - inner)) / 2;
+    return inner ? {x0: -inner, x1: inner, y0: a0 + my, y1: 1 - my} : {x0: -1 + m, x1: 1 - m, y0: b0 + m, y1: b1 - m};
+  }
   /**
    * Camera {t, p} looking along dir with every vertex of obj inside the free band (header and
    * dock excluded), 8% of the viewport clear on each side, at any aspect. fill > 1 backs off further.
@@ -293,11 +301,7 @@ async function main() {
     const u = new THREE.Vector3().crossVectors(r, f);
     const ty = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     const tx = ty * camera.aspect;
-    const m = 0.16; // 8% of the viewport on each side, in NDC units
-    const [b0, b1] = band();
-    const a0 = b0 - 12 / S.size.h; // the dock's top edge (band() keeps 6 px clear of it)
-    const my = ((1 - a0) * (1 - inner)) / 2;
-    const W = inner ? {x0: -inner, x1: inner, y0: a0 + my, y1: 1 - my} : {x0: -1 + m, x1: 1 - m, y0: b0 + m, y1: b1 - m};
+    const W = windowOf(inner);
     const c = new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
     const P = pts.map((p) => {
       p.sub(c);
@@ -320,6 +324,74 @@ async function main() {
     }
     const t = c.clone().addScaledVector(r, ox).addScaledVector(u, oy);
     return {t, p: t.clone().addScaledVector(dir, D * fill)};
+  }
+  // --- the idle auto-turn orbits the whole gun: the camera backs off (never in) by just enough that every
+  // mesh keeps its 8% margin at every azimuth. fitPts: the extreme world vertices of each visible mesh along
+  // 26 directions (a few thousand points that bound the gun like all of its ~150k vertices).
+  const DIRS = [];
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) if (i || j || k) DIRS.push(new THREE.Vector3(i, j, k).normalize());
+  function hullPoints() {
+    gun.updateMatrixWorld(true);
+    const pts = [];
+    const v = new THREE.Vector3();
+    const best = new Float64Array(DIRS.length);
+    const arg = DIRS.map(() => new THREE.Vector3());
+    gun.traverse((o) => {
+      if (!o.isMesh || !o.visible) return;
+      if (o.isInstancedMesh) return pts.push(...pointsOf(o));
+      best.fill(-Infinity);
+      const a = o.geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) {
+        v.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
+        for (let d = 0; d < DIRS.length; d++) {
+          const dot = v.x * DIRS[d].x + v.y * DIRS[d].y + v.z * DIRS[d].z;
+          if (dot > best[d]) (best[d] = dot), arg[d].copy(v);
+        }
+      }
+      for (const p of arg) pts.push(p.clone());
+    });
+    return pts;
+  }
+  let fitS = 1; // the extra dolly (>= 1) the auto-turn has added to the camera's offset from its target
+  let fitPts = null;
+  let fitW = null;
+  /** Smallest offset scale (>= 1) that keeps every fitPts point inside the window, for the camera as it is now. */
+  function fitNeed() {
+    const c = camera.position;
+    const t = controls.target;
+    const D0 = c.distanceTo(t);
+    camera.updateMatrixWorld();
+    const e = camera.matrixWorld.elements;
+    const ty = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const tx = ty * camera.aspect;
+    const W = fitW;
+    let s = 1;
+    for (const p of fitPts) {
+      const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z;
+      const x = dx * e[0] + dy * e[1] + dz * e[2];
+      const y = dx * e[4] + dy * e[5] + dz * e[6];
+      const z = -(dx * e[8] + dy * e[9] + dz * e[10]);
+      const lx = x > 0 ? W.x1 : W.x0;
+      const ly = y > 0 ? W.y1 : W.y0;
+      if (lx * x > 0) s = Math.max(s, 1 + (x / (lx * tx) - z) / D0);
+      if (ly * y > 0) s = Math.max(s, 1 + (y / (ly * ty) - z) / D0);
+    }
+    return s;
+  }
+  function unfit() {
+    if (fitS !== 1) camera.position.sub(controls.target).multiplyScalar(1 / fitS).add(controls.target);
+  }
+  function fit(dt) {
+    const turn = controls.autoRotate;
+    let want = 1;
+    if (turn) {
+      fitPts ||= hullPoints();
+      fitW ||= Object.fromEntries(Object.entries(windowOf()).map(([k, v]) => [k, v * 0.996])); // 0.4% inside: the 26-direction hull is a hair short of the true vertices
+      want = fitNeed();
+    } else fitPts = fitW = null;
+    fitS += (want - fitS) * (1 - Math.exp(-dt * (want > fitS ? 6 : 2)));
+    if (!turn && fitS < 1.0005) fitS = 1;
+    if (fitS !== 1) camera.position.sub(controls.target).multiplyScalar(fitS).add(controls.target);
   }
   function flyTo(c, dur = 1.2) {
     fly = {t0: performance.now(), dur: dur * 1000, ft: controls.target.clone(), fp: camera.position.clone(), tt: c.t, tp: c.p};
@@ -685,6 +757,8 @@ async function main() {
   const onResize = () => {
     S.resize();
     ckeys = null;
+    fitS = 1;
+    fitW = null;
     if (!window.__READY || tour.active) return;
     if (focus >= 0) return flyTo(frame(asms[focus].group, new THREE.Vector3(0.42, 0.34, 1), 1.15), 0.3);
     fly = null;
@@ -852,8 +926,12 @@ async function main() {
       lastInput = now;
     }
     controls.autoRotate = !still && !tour.active && !fly && !dir && now - lastInput > 5000;
-    if (!tour.active && !dir) controls.update(dt);
-    else camera.lookAt(controls.target);
+    if (!tour.active && !dir) {
+      if (fly) fitS = 1;
+      else unfit();
+      controls.update(dt);
+      if (!fly) fit(dt);
+    } else (fitS = 1), camera.lookAt(controls.target);
 
     // hover outline + name card
     if (!pinned && !drag) {
