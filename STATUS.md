@@ -1,11 +1,9 @@
-# STATUS - 2026-11-15, session 10 (tiers, triangles, adaptive steps)
-- Tiers: HIGH / MED / LOW (header toggle, ?q=). Start on MED unless the renderer names NVIDIA RTX/GTX, Radeon RX, Arc or Apple M (HIGH); phones LOW. The 1 s probe is gone.
-- MED = 1024 shadow map, no SSAO, reflection 512, DPR <= 1.25; composer, bloom and outline stay on.
-- Triangles per frame on MED: idle 482k -> 137k, x-ray 946k -> 260k, cycle 1.42M -> 260-430k (gun geometry 293k -> ~100k). Idle and x-ray are under 350k; the cycle peaks at 430k.
-- MEDIUM frame time, 1920x1080: 16.7 ms in the cycle, 30 fps turn at idle; with a 4x CPU throttle 18.9 ms in the cycle (adaptive dropped the reflection), 30 fps held elsewhere. GPU not throttleable here (RTX 4090).
-- Adaptive order: SSAO, reflection, shadow map 1024, DPR 1, shadows off (steps the tier already has are skipped); `?perf=1`, THROTTLE= and SETTLE= env in scripts/perf.mjs.
-- Locked/Ready: the camera eases back to the default framing in 0.8 s, dimming clears. docs/hero.png re-shot; README updated.
-- Look first 1) the cycle is still over 350k at its busiest tick; the next cuts are the trigger group (17k) and forend (14k).
-- 2) Real integrated graphics were not tested; the 4x number is CPU-throttled on a 4090.
-- 3) Shadows-off step recompiles materials (one hitch, last resort). Render on demand still needs new animation added to sigOf/camOf in main.js. D3D warning X4122 still predates this.
-- IRONWOOD_JOB.md is still untracked.
+# STATUS - 2026-11-15, session 11 (stored tier, render cost, framing, receiver light)
+- Tier: stored under "ironwood.tier.v2", written only by a click on the toggle; tiers saved by earlier builds (ironwood.q) are ignored (checked: old key low -> starts HIGH by GPU).
+- Adaptive = render cost: GPU time of S.render() (timer query; ?perf=1 sums its pass queries), floored by the CPU time of the call; median > 20 ms over 1 s of drawn frames (>= 8). Skipped frames never count. RENDER_MS=10: no step; RENDER_MS=25: steps; THROTTLE=4 cycle: no reflection.
+- Framing: the resting view was already 8.00% left/right at 1189x940, 1920x935, 1280x720, 390x844 (all 152,587 vertices). The clip was the idle auto-turn (360 deg at a fixed distance, -2.4% at 1189x940); it now dollies out just enough (26-direction hull per mesh, eased, never in).
+- Full orbit, all vertices, worst side margin: 8.06 / 8.12 / 8.08 / 8.13% at the four sizes.
+- Receiver: cool fill (lower right, 25% of the key, follows the receiver close-up) + lighter, rougher, isotropic wall steel. Luminance wall 5.6 -> 33, top flat 50, port edges 105-120 on HIGH, MED, LOW, shadows off; close-up peaks at 233 (< 92%).
+- Look first 1) tones were measured headless on a 4090 as luminance of 3 regions; not seen on integrated graphics.
+- 2) Without the timer extension (Safari, Firefox) cost is the CPU time of the render call, which under-reads a slow GPU.
+- 3) The turn builds its hull at turn start (~150k vertices, one long frame while idle). D3D warning X4122 predates this. IRONWOOD_JOB.md is still untracked.
