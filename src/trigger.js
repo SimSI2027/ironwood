@@ -55,13 +55,19 @@ export function buildTrigger() {
   // white) and no worn-edge brightening (on parts this thin every face is an edge)
   const blued = new THREE.MeshPhysicalMaterial({color: 0x252c39, metalness: 1, roughness: 0.42, clearcoat: 0.2, clearcoatRoughness: 0.2});
 
-  // --- trigger guard: an oval loop, a 3 mm band (8.8 mm wide), its top on the housing
-  const guardPath = [];
-  for (let k = 0; k < 64; k++) {
-    const a = Math.PI / 2 + (k / 64) * Math.PI * 2;
-    guardPath.push([-8.85 + 4.35 * Math.cos(a), -7.75 + 1.85 * Math.sin(a)]);
+  // --- trigger guard: an open U loop of a 3 mm band (8.8 mm wide), 6 cm long and 3 cm deep outside,
+  // under the housing's underside (y -6.11). Both ends rise 2 mm into the housing, each on a small
+  // foot, so it hangs from the housing rather than floating as a ring.
+  const G = {cx: -8.85, top: -6.11, a: 3 - 0.15, b: 3 - 0.15}; // centreline: outer size minus half the band
+  const guardPath = [[G.cx + G.a, G.top + 0.2]];
+  for (let k = 0; k <= 48; k++) {
+    const th = (k / 48) * Math.PI; // a squared-off half superellipse (n = 3): vertical at both ends
+    const c = Math.cos(th);
+    guardPath.push([G.cx + G.a * Math.sign(c) * Math.abs(c) ** (2 / 3), G.top - G.b * Math.sin(th) ** (2 / 3)]);
   }
-  const guard = mesh(sweepXY(rrectSection(0.15, 0.44, 0.07, 3), guardPath, {closed: true, samples: 128}), blued);
+  guardPath.push([G.cx - G.a, G.top + 0.2]);
+  const guard = mesh(sweepXY(rrectSection(0.15, 0.44, 0.07, 3), guardPath, {samples: 120}), blued);
+  for (const s of [1, -1]) guard.add(mesh(rbox(0.8, 0.22, 0.95, 0.08), blued, G.cx + s * G.a, G.top - 0.06, 0));
   A.add(guard, 'trigger guard', {ex: [0, -2.6, 0], delay: 0.15});
 
   // --- trigger: curved steel blade, 4 mm thick, its side face 6.4 mm tapering to 4.8 mm
