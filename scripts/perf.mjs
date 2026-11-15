@@ -13,7 +13,7 @@ const page = await browser.newPage({viewport: {width: +W, height: +H}, deviceSca
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
-await page.goto(pathToFileURL(path.resolve('docs/index.html')).href + '?perf=1' + (/(^|'?perf=1&q=high' + (extra ? '&' + extra : ''))q=/.test(extra) ? '' : '&q=high') + (extra ? '&' + extra : ''));
+await page.goto(pathToFileURL(path.resolve('docs/index.html')).href + '?perf=1' + (/(^|&)q=/.test(extra) ? '' : '&q=high') + (extra ? '&' + extra : ''));
 await page.waitForFunction(() => window.__READY, null, {timeout: 60000});
 const read = () => page.evaluate(() => JSON.parse(JSON.stringify({...window.__PERF, reset: 0})));
 const wait = (ms) => page.waitForTimeout(ms);
