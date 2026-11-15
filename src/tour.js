@@ -17,7 +17,7 @@ const sph = new THREE.Spherical();
 const sph2 = new THREE.Spherical();
 
 /** Blend two cameras {t, p} through spherical coordinates around the blended target. */
-function blend(a, b, w) {
+export function blend(a, b, w) {
   if (w <= 0) return a;
   if (w >= 1) return b;
   const t = a.t.clone().lerp(b.t, w);
@@ -36,15 +36,12 @@ function orbit(c, da) {
   return {t: c.t.clone(), p: new THREE.Vector3().setFromSpherical(sph).add(c.t)};
 }
 
-export function createTour({asms, poseAll, frame, gun}) {
+export function createTour({asms, poseAll, frame, gun, clockCam}) {
   const T = {active: false, t0: 0, cams: null};
   T.start = (now) => {
     poseAll(0, 0);
     const hero = frame(gun, new THREE.Vector3(0.42, 0.3, 1));
-    const rec = frame(asms[3].group, new THREE.Vector3(0.25, 0.22, 1), 1.0);
-    rec.t.x += 9;
-    rec.p.x += 9;
-    rec.p.sub(rec.t).multiplyScalar(1.9).add(rec.t);
+    const rec = clockCam(1, true); // where the clock beat ends: the port
     poseAll(0.7, 0);
     const parts = asms.map((a) => frame(a.group, new THREE.Vector3(0.45, 0.36, 1), 1.15));
     poseAll(1, 0);
@@ -65,8 +62,9 @@ export function createTour({asms, poseAll, frame, gun}) {
     if (t < 2) {
       cam = orbit(C.hero, -0.12 * (t / 2));
     } else if (t < 5 + D) {
-      cam = blend(orbit(C.hero, -0.12), C.rec, sm(2, 2.9, t));
-      c = t > C0 && t < C1 ? (t - C0) / (C1 - C0) : 0; // FULL at 0.25x
+      c = t > C0 && t < C1 ? (t - C0) / (C1 - C0) : t >= C1 ? 1 : 0; // FULL at 0.25x
+      cam = blend(orbit(C.hero, -0.12), clockCam(c), sm(2, 2.9, t)); // the clock's own camera
+      if (t >= C1) c = 0;
     } else if (t < 5 + D + n) {
       const u = t - D;
       explode = 0.7 * sm(5, 6, u);

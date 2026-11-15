@@ -38,7 +38,7 @@ export function buildBarrel() {
   // chamber flats and witness ring at the shank
   const ring = mesh(tubeX(4.62, 4.9, 1.47, 1.3, 0.03), M.steelSatin);
   barrel.add(ring);
-  A.add(barrel, 'barrel');
+  A.add(barrel, 'barrel', {xray: true}); // x-ray while the shot runs the bore
 
   // --- ventilated rib: flat matted strip on posts
   const ribGeo = [];

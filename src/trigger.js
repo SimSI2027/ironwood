@@ -49,7 +49,7 @@ export function buildTrigger() {
   inner.holes.push(hole([[-7.6, -5.0], [-5.6, -5.0], [-5.6, -4.45], [-7.6, -4.45]], 0.25));
   const iw = extrudeXY(inner, 0.2, 0.05, 20);
   housing.add(mesh(iw, M.alloy, 0, 0, 0.92), mesh(iw, M.alloy, 0, 0, -0.92));
-  A.add(housing, 'trigger housing');
+  A.add(housing, 'trigger housing', {xray: true}); // x-ray from press to strike
 
   // --- trigger guard loop
   const guardPath = [

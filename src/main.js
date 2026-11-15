@@ -12,15 +12,16 @@ import {buildBolt} from './bolt.js';
 import {buildTrigger} from './trigger.js';
 import {buildStock} from './stock.js';
 import {buildPad} from './pad.js';
-import {createTour, TOUR_LEN} from './tour.js';
+import {createTour, TOUR_LEN, blend} from './tour.js';
 import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, tickAt, FULL_S, FIRE_END, pumpC, tOfC} from './cycle.js';
-import {createFireFX, recoilAt, RECOIL} from './fire.js';
-import {MAG_Y} from './barrel.js';
+import {createFireFX, recoilAt, RECOIL, shotX} from './fire.js';
+import {MAG_Y, MUZZLE} from './barrel.js';
 import {PUMP} from './forend.js';
 
 const q = new URLSearchParams(location.search);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
+const smr = (a, b, x) => ((x = clamp01((x - a) / (b - a))), x * x * (3 - 2 * x));
 
 async function loadFonts() {
   const faces = [
@@ -159,6 +160,7 @@ async function main() {
   controls.addEventListener('start', () => {
     lastInput = performance.now();
     fly = null;
+    dir = null;
     if (tour.active) stopTour();
   });
 
@@ -168,7 +170,8 @@ async function main() {
   let focus = -1;
   const dim = asms.map(() => 0);
   const rim = asms.map(() => 0);
-  let xr = 0; // receiver x-ray (pump cycle)
+  const xr = asms.map(() => 0); // per-assembly x-ray, set from the clock
+  let xg = 0; // x-ray gate: the clock is running on the assembled gun
 
   const HERO_DIR = new THREE.Vector3(0.42, 0.3, 1);
   const poseAll = (e, p) => asms.forEach((a) => a.pose(e, p));
@@ -238,14 +241,58 @@ async function main() {
   }
   function focusOn(i) {
     focus = i;
+    dir = null;
     pillBtns.forEach((b, k) => b.classList.toggle('on', k === i));
     poseAll(st.explode, channelsAt(st.t, st.fired));
     flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15));
   }
 
+  // --- clock camera: a pure function of t. Pushes to the trigger group for Press-Strike, tracks the
+  // shot down the barrel, pulls wide for Muzzle-Recoil, moves to the port for the eject. Keys are
+  // framed on the assembled gun at rest.
+  let ckeys = null;
+  let dir = null; // {from, t0}: the camera follows the clock (FIRE/PUMP/FULL, scrubber, step)
+  function clockKeys() {
+    const gp = gun.position.clone();
+    const gr = gun.rotation.z;
+    gun.position.set(-12, 0, 0);
+    gun.rotation.z = 0;
+    poseAll(0, 0);
+    gun.updateMatrixWorld(true);
+    const wide = frame(gun, HERO_DIR);
+    const trig = frame(asms[5].group, new THREE.Vector3(0.2, 0.12, 1), 1.35);
+    const k = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * Math.min(1, camera.aspect);
+    const at = (x, y, z, d, h) => {
+      const t = gun.localToWorld(new THREE.Vector3(x, y, z));
+      return {t, p: t.clone().addScaledVector(d.normalize(), h / k)};
+    };
+    const track = (x) => at(x, 0, 0, new THREE.Vector3(-0.35, 0.32, 1), 10);
+    const port = at(-11, -13, 12, new THREE.Vector3(0.3, 0.5, 1), 27); // the port and the landing spot
+    gun.position.copy(gp);
+    gun.rotation.z = gr;
+    poseAll(st.explode, channelsAt(st.t, st.fired));
+    return {wide, trig, track, port};
+  }
+  function clockCam(t, fresh = false) {
+    if (fresh || !ckeys) ckeys = clockKeys();
+    const K = ckeys;
+    if (t < 0.11) return blend(K.wide, K.trig, smr(0, 0.03, t));
+    if (t < 0.21) return blend(K.trig, K.track(t < 0.15 ? 3 : shotX(t)), smr(0.11, 0.14, t));
+    if (t < 0.3) return blend(K.track(MUZZLE), K.wide, smr(0.21, 0.25, t));
+    return blend(K.wide, K.port, smr(0.3, 0.4, t));
+  }
+  const direct = () => !dir && (dir = {from: null, t0: 0});
+  /** x-ray per phase: trigger group and receiver Press-Strike, barrel Burn-Travel, receiver in the pump. */
+  function xrayAt(t) {
+    const e = 0.006;
+    const win = (a, b) => smr(a - e, a, t) * (1 - smr(b, b + e, t));
+    return {receiver: Math.max(win(0.025, 0.115), win(0.3, 0.99)), trigger: win(0.025, 0.115), barrel: win(0.11, 0.212)};
+  }
+
   // --- tour
-  const tour = createTour({asms, gun, poseAll, frame, camera});
+  const tour = createTour({asms, gun, poseAll, frame, camera, clockCam});
   function startTour() {
+    dir = null;
     pinned = false;
     setHover(null);
     focusOn(-1);
@@ -361,6 +408,7 @@ async function main() {
     st.target = 0;
     range.value = 0;
     lastInput = performance.now();
+    direct();
   };
   cRange.addEventListener('input', () => {
     engage();
@@ -407,7 +455,7 @@ async function main() {
       if (!root) continue;
       const ai = asms.findIndex((a) => a.key === root.userData.asm);
       if (dim[ai] > 0.4) continue;
-      if (xr > 0.5 && root.userData.part === 'receiver') continue; // x-ray: pick what is inside
+      if (xr[ai] > 0.5 && root.userData.xray) continue; // x-ray: pick what is inside
       anchor.copy(root.worldToLocal(h.point.clone()));
       return root;
     }
@@ -463,6 +511,7 @@ async function main() {
   // resize: the default (whole gun) view is refitted along the current view direction
   const onResize = () => {
     S.resize();
+    ckeys = null;
     if (!window.__READY || tour.active) return;
     if (focus >= 0) return flyTo(frame(asms[focus].group, new THREE.Vector3(0.42, 0.34, 1), 1.15), 0.3);
     fly = null;
@@ -528,6 +577,7 @@ async function main() {
         st.t += (dt * cyc.speed) / FULL_S;
         if (st.t >= 1) {
           st.t = 0;
+          dir = null; // the camera stays at the port
           cyc.playing = false;
         }
       }
@@ -543,7 +593,9 @@ async function main() {
     const ti = tickAt(st.t);
     if (ti !== lastTick) tickEls.forEach((e, i) => e.classList.toggle('on', i === ti));
     lastTick = ti;
-    xr += ((active ? 1 : 0) - xr) * (still ? 1 : 1 - Math.exp(-dt * 7));
+    xg += ((active ? 1 : 0) - xg) * (still ? 1 : 1 - Math.exp(-dt * 7));
+    const xt = xrayAt(st.t);
+    asms.forEach((a, i) => (xr[i] = xg * (xt[a.key] || 0)));
     poseAll(st.explode, channelsAt(st.t, st.fired));
     shells.pose(st.t, st.fired, st.t > 0 && st.explode < 0.02);
     fx.pose(st.t, st.explode < 0.02);
@@ -560,7 +612,7 @@ async function main() {
     asms.forEach((a, i) => {
       dim[i] += ((focus < 0 || focus === i ? 0 : 1) - dim[i]) * kd;
       rim[i] += ((focus === i ? 1 : 0) - rim[i]) * kd;
-      a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr < 0.004 ? 0 : xr);
+      a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr[i] < 0.004 ? 0 : xr[i]);
     });
     S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
     S.renderer.toneMappingExposure = 1.08 - 0.65 * rim[3];
@@ -572,8 +624,19 @@ async function main() {
       camera.position.lerpVectors(fly.fp, fly.tp, t);
       if (t >= 1) fly = null;
     }
-    controls.autoRotate = !still && !tour.active && !fly && now - lastInput > 5000;
-    if (!tour.active) controls.update(dt);
+    // the clock camera: eases in from wherever the camera was, then is a pure function of t
+    if (dir && !tour.active && st.explode < 0.05) {
+      if (!dir.from) dir = {from: {t: controls.target.clone(), p: camera.position.clone()}, t0: now};
+      const k = clockCam(st.t);
+      const w = ease(clamp01((now - dir.t0) / 800));
+      const cm = w < 1 ? blend(dir.from, k, w) : k;
+      controls.target.copy(cm.t);
+      camera.position.copy(cm.p);
+      fly = null;
+      lastInput = now;
+    }
+    controls.autoRotate = !still && !tour.active && !fly && !dir && now - lastInput > 5000;
+    if (!tour.active && !dir) controls.update(dt);
     else camera.lookAt(controls.target);
 
     // hover outline + name card
