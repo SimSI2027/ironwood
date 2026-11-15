@@ -94,35 +94,6 @@ export function walnut({seed = 0, dark = 0, bump = null, bumpScale = 0, tint = 1
   return m;
 }
 
-let checkerTex = null;
-/** Diamond checkering tile, drawn once in code. */
-export function checkerTexture() {
-  if (checkerTex) return checkerTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d');
-  // pyramids: bright centre, dark V grooves along both diagonals
-  const img = g.createImageData(128, 128);
-  for (let y = 0; y < 128; y++)
-    for (let x = 0; x < 128; x++) {
-      const u = x / 128;
-      const v = y / 128;
-      const d1 = Math.abs(((u + v) % 0.5) - 0.25) / 0.25; // 1 at ridge centre
-      const d2 = Math.abs(((u - v + 1) % 0.5) - 0.25) / 0.25;
-      const h = Math.min(d1, d2);
-      const val = Math.round(255 * Math.pow(h, 0.7));
-      const i = (y * 128 + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = val;
-      img.data[i + 3] = 255;
-    }
-  g.putImageData(img, 0, 0);
-  checkerTex = new THREE.CanvasTexture(c);
-  checkerTex.wrapS = checkerTex.wrapT = THREE.RepeatWrapping;
-  checkerTex.colorSpace = THREE.NoColorSpace;
-  checkerTex.anisotropy = 8;
-  return checkerTex;
-}
-
 const normalTex = new Map();
 /**
  * Tangent-space normal map of a diamond relief (pyramids between two sets of diagonal V grooves),

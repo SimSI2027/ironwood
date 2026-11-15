@@ -1,4 +1,10 @@
 ref/
+IRONWOOD_JOB.md
 cutaway-out/
 node_modules/
 logs.txt
+*.log
+*.tmp
+*.bak
+scratch/
+scratch-*

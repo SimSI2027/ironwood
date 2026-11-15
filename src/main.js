@@ -683,7 +683,6 @@ async function main() {
     else if (g === 'pump') (st.t = FIRE_END), (cyc.stop = 1), setSpeed(0.25);
     else (st.t = 0), (cyc.stop = 1), setSpeed(0.25);
   };
-  const stepTo = (to, from = st.t) => (cyc.tw = {from, to, t0: performance.now(), dur: 450});
   cycEl.querySelector('.iw-cb').onclick = (e) => {
     const a = e.target.closest('button')?.dataset.a;
     if (!a) return;
