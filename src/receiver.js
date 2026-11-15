@@ -130,6 +130,12 @@ uniform vec2 uSweep;`)
   hw.customProgramCacheKey = M.steelBright.customProgramCacheKey;
   hw.anisotropy = 0;
   hw.roughness = 0.6;
+  const scrM = hw.clone(); // screw heads: a dull domed top, so the rear one does not out-shine the wall around it
+  scrM.onBeforeCompile = hw.onBeforeCompile;
+  scrM.customProgramCacheKey = hw.customProgramCacheKey;
+  scrM.roughness = 0.8;
+  scrM.envMapIntensity = 0.15;
+  scrM.color.multiplyScalar(0.45);
   // matted flat on the crown
   const flat = mesh(rbox(15.6, 0.03, 1.0, 0.01), M.rib, -8.2, REC.top + th + 0.006, 0);
   flat.material.bumpMap.repeat.set(1, 4);
@@ -160,7 +166,7 @@ uniform vec2 uSweep;`)
     for (const [x, y, a] of scr) {
       const g = group(x, y, s * (half - 0.005));
       g.rotation.y = -s * Math.PI / 2; // lathe +X -> outward
-      g.add(mesh(head, hw));
+      g.add(mesh(head, scrM));
       g.add(mesh(slotG, M.steelInner, 0.12, 0, 0, a + s, 0, 0));
       body.add(g);
     }
