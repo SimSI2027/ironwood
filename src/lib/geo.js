@@ -22,20 +22,21 @@ export function group(x = 0, y = 0, z = 0, ...kids) {
 }
 
 /** Rounded box (never a razor edge). */
-export function rbox(w, h, d, r = 0.06, seg = 2) {
+export function rbox(w, h, d, r = 0.06, seg = 1) {
   r = Math.min(Math.max(r, 0.04), w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3); // never under 0.4 mm
   return new RoundedBoxGeometry(w, h, d, seg, r);
 }
 
 /** Lathe around +X. pts = [[x, r], ...] in order (closed loops: outer forward, inner back). */
-export function latheX(pts, seg = 48, phiStart = 0, phiLength = Math.PI * 2) {
-  const g = new THREE.LatheGeometry(pts.map(([x, r]) => new V2(Math.max(r, 1e-4), x)), seg, phiStart, phiLength);
+export function latheX(pts, seg = 32, phiStart = 0, phiLength = Math.PI * 2) {
+  const rmax = Math.max(...pts.map((p) => p[1]));
+  const g = new THREE.LatheGeometry(pts.map(([x, r]) => new V2(Math.max(r, 1e-4), x)), Math.min(seg, 32, rmax < 0.15 ? 10 : rmax < 0.4 ? 14 : rmax < 1 ? 24 : 32), phiStart, phiLength); // 32 radial on the tubes, fewer on the thin pins and screws
   g.rotateZ(-Math.PI / 2);
   return g;
 }
 
 /** Hollow tube along +X from x0 to x1 with chamfered ends. */
-export function tubeX(x0, x1, ro, ri, ch = 0.06, seg = 48) {
+export function tubeX(x0, x1, ro, ri, ch = 0.06, seg = 32) {
   return latheX(
     [
       [x0, ri + ch],
@@ -53,7 +54,7 @@ export function tubeX(x0, x1, ro, ri, ch = 0.06, seg = 48) {
 }
 
 /** Solid rod along +X with chamfered ends. */
-export function rodX(x0, x1, r, ch = 0.04, seg = 24) {
+export function rodX(x0, x1, r, ch = 0.04, seg = 16) {
   return latheX([[x0, 0], [x0, r - ch], [x0 + ch, r], [x1 - ch, r], [x1, r - ch], [x1, 0]], seg);
 }
 
@@ -104,6 +105,7 @@ export function slot(x0, x1, y, r) {
 
 /** Extrude an XY shape to total thickness `depth` along Z, centred on z=0, with a real bevel. */
 export function extrudeXY(shape, depth, bevel = 0.05, curveSegments = 20, extra = {}) {
+  if (!extra.free) curveSegments = Math.min(curveSegments, 4); // 4 per curve: fillets and holes stay round at the default view
   const b = Math.min(Math.max(bevel, 0.04), depth * 0.45); // 0.4 mm bevel minimum
   const g = new THREE.ExtrudeGeometry(shape, {
     depth: Math.max(depth - 2 * b, 1e-3),
@@ -172,10 +174,10 @@ function roundBevels(g) {
 }
 
 /** Cylinder along Y like CylinderGeometry, but with small chamfered rims (no razor edges). */
-export function rcyl(rTop, rBot, h, seg = 24, ch = Math.min(0.04, rTop * 0.25, rBot * 0.25, h * 0.25)) {
+export function rcyl(rTop, rBot, h, seg = 16, ch = Math.min(0.04, rTop * 0.25, rBot * 0.25, h * 0.25)) {
   const g = new THREE.LatheGeometry(
     [[0, -h / 2], [rBot - ch, -h / 2], [rBot, -h / 2 + ch], [rTop, h / 2 - ch], [rTop - ch, h / 2], [0, h / 2]].map(([r, y]) => new V2(Math.max(r, 1e-4), y)),
-    seg,
+    (seg = Math.min(seg, 16)),
   );
   if (seg >= 10) return g;
   const flat = g.toNonIndexed();
@@ -189,8 +191,8 @@ export function extrudeXZ(shape, thick, bevel = 0.04, cs = 16) {
   return g;
 }
 /** Shape drawn in (z, y) cross-section, extruded along +X from 0 to len. */
-export function extrudeYZ(shape, len, bevel = 0.05, cs = 32, steps = 1) {
-  const g = extrudeXY(shape, len, bevel, cs, {steps});
+export function extrudeYZ(shape, len, bevel = 0.05, cs = 32, steps = 1, free = false) {
+  const g = extrudeXY(shape, len, bevel, cs, {steps, free});
   g.rotateY(Math.PI / 2); // depth z -> x, shape x -> -z
   g.translate(len / 2, 0, 0);
   return g;
@@ -320,7 +322,7 @@ export function rrectSection(hn, hz, r, seg = 4) {
 }
 
 /** Coil spring along +X: closed ground ends, real helix. */
-export function spring(len, R, wire, turns, {endTurns = 1.25, seg = 18, radial = 6} = {}) {
+export function spring(len, R, wire, turns, {endTurns = 1.25, seg = 8, radial = 5} = {}) {
   const pitchEnd = wire * 2.05;
   const body = turns - 2 * endTurns;
   const pitch = (len - 2 * endTurns * pitchEnd - wire * 2) / body;
@@ -336,7 +338,7 @@ export function spring(len, R, wire, turns, {endTurns = 1.25, seg = 18, radial =
       return out.set(xAt(k), R * Math.cos(a), R * Math.sin(a));
     }
   }
-  return new THREE.TubeGeometry(new Helix(), Math.ceil(turns * seg), wire, radial, false);
+  return new THREE.TubeGeometry(new Helix(), Math.ceil(turns * Math.min(seg, 8)), wire, Math.min(radial, 4), false);
 }
 
 /** Knurled cylinder along +X (straight knurl): n ridges. */
@@ -371,6 +373,6 @@ export function screwX(len, rHead, rShank, headH, threads = 12) {
     [len, rShank * 0.6],
     [len, 0],
   ];
-  return latheX(pts, 24);
+  return latheX(pts, 12);
 }
 export {mergeVertices, mergeGeometries};

@@ -54,8 +54,8 @@ export function ovalShape(a, w, n = 72) {
 }
 
 function stockGeo() {
-  const NR = 64;
-  const NM = 96;
+  const NR = 48;
+  const NM = 32;
   const NF = 7;
   const uf = 1 - 0.4 / 21.7; // the last 4 mm carry the rounded edge
   const us = [];
@@ -139,8 +139,8 @@ function subdivide(g) {
 }
 /** Checkered panel draped on the curved side of the grip, offset 0.15 mm, one side (+z or -z). */
 function panelGeo(shape, side) {
-  let g = new THREE.ShapeGeometry(shape, 24).toNonIndexed();
-  for (let k = 0; k < 3; k++) g = subdivide(g);
+  let g = new THREE.ShapeGeometry(shape, 12).toNonIndexed();
+  for (let k = 0; k < 2; k++) g = subdivide(g);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) p.setZ(i, side * (surfZ(p.getX(i), p.getY(i)) + 0.015));
   if (side < 0) {
@@ -197,14 +197,14 @@ export function buildStock() {
   const border = new THREE.MeshStandardMaterial({color: 0x1a0d06, roughness: 0.6});
   for (const s of [1, -1]) {
     const bpts = panel.getPoints(24).map((v) => new THREE.Vector3(v.x, v.y, s * (surfZ(v.x, v.y) + 0.02)));
-    stock.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bpts, true), 220, 0.025, 4, true), border));
+    stock.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bpts, true), 110, 0.025, 3, true), border));
   }
   A.add(stock, 'buttstock');
   const slope = (x) => (bellyY(x + 0.2) - bellyY(x - 0.2)) / 0.4;
 
   // --- grip cap: a low oval button set into the belly where the grip ends
   const capX = -27.4;
-  const capG = group(capX, bellyY(capX) + 0.1, 0, mesh(new THREE.SphereGeometry(1, 32, 16).scale(1.5, 0.3, 0.6), M.polymer));
+  const capG = group(capX, bellyY(capX) + 0.1, 0, mesh(new THREE.SphereGeometry(1, 20, 10).scale(1.5, 0.3, 0.6), M.polymer));
   capG.rotation.z = Math.atan(slope(capX));
   capG.add(mesh(rcyl(0.3, 0.3, 0.06, 24), M.steelSatin, 0, -0.29, 0));
   A.add(capG, 'grip cap', {ex: [0, -2.4, 0], delay: 0.3});

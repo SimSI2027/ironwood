@@ -104,7 +104,7 @@ export function createFireFX() {
 
   // 60 pellets: fixed per-pellet direction and speed, positions are functions of t
   const N = 60;
-  const cloud = add(new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshStandardMaterial({color: 0x55504c, metalness: 0.7, roughness: 0.35, emissive: 0xff8a40, emissiveIntensity: 1.5}), N));
+  const cloud = add(new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 6, 4), new THREE.MeshStandardMaterial({color: 0x55504c, metalness: 0.7, roughness: 0.35, emissive: 0xff8a40, emissiveIntensity: 1.5}), N));
   const P = Array.from({length: N}, () => ({a: rnd() * Math.PI * 2, r: Math.sqrt(rnd()), k: 0.9 + 0.2 * rnd(), lag: rnd() * 2.2}));
   const m4 = new THREE.Matrix4();
 

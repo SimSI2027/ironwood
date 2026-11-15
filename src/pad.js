@@ -16,9 +16,9 @@ export function buildPad() {
   const W = BUTT_W; // the butt outline is an oval, half-height hl, half-width W
   const across = (y, a, w) => w * Math.max(0, 1 - Math.abs(y / a) ** SE) ** (1 / SE); // half-width at y
 
-  // --- spacer plate: the stock's own last ring (64 points), 2.6 mm thick, square edges so the wood,
+  // --- spacer plate: the stock's own last ring (48 points), 2.6 mm thick, square edges so the wood,
   // spacer and pad read as one surface
-  const NR = 64;
+  const NR = 48;
   const spacer = mesh(new THREE.ExtrudeGeometry(ovalShape(hl, W, NR), {depth: 0.26, bevelEnabled: false}).rotateY(Math.PI / 2).translate(-0.26, 0, 0), M.polymer);
   A.add(spacer, 'spacer plate', {parent: frame, ex: [3.2, 0, 0], delay: 0.3});
 

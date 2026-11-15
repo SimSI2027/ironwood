@@ -30,7 +30,8 @@ export function buildBarrel() {
     [4.45, 1.52],
     [4.6, 1.45],
   ];
-  for (let x = 5; x <= 70.4; x += 0.5) outer.push([x, barrelR(x)]);
+  // the taper is smooth: a point every 1.7 cm where it curves (13-30), every 10 cm on the straight
+  for (const x of [5, 13, ...Array.from({length: 10}, (_, k) => 13 + (k + 1) * 1.7), 40, 50, 60, 70.4]) outer.push([x, barrelR(x)]);
   outer.push([70.85, barrelR(70.85)], [71, 0.99], [71, BORE + 0.05], [70.8, BORE], [0.2, BORE], [0, BORE + 0.12]);
   const tube = mesh(latheX(outer, 64), M.steel);
   const boreLiner = mesh(tubeX(0.3, 70.7, BORE + 0.002, BORE - 0.01, 0.01, 32), M.bore);
