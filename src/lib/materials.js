@@ -254,6 +254,9 @@ export function makeMaterials() {
     bore: new THREE.MeshStandardMaterial({color: 0x07080a, metalness: 1, roughness: 0.35}),
     rib: new THREE.MeshPhysicalMaterial({color: 0x1f252e, metalness: 1, roughness: 0.55, bumpMap: lineTexture(), bumpScale: 1.2}),
     walnut: (seed, opt) => walnut({seed, ...opt}),
+    // the one walnut of the forend and the stock: same two tones, figure and grain scale (an
+    // instance per assembly only so each can dim on its own)
+    wood: () => walnut({seed: 0}),
   };
   M.rib.bumpMap.repeat.set(1, 1);
   // Lathe uv runs u around the tube, so the default tangent is circumferential; turn it 90°

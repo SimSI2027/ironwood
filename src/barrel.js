@@ -98,10 +98,24 @@ export function buildBarrel() {
   s.lineTo(R1, 0);
   s.holes.push(new THREE.Path().absarc(0, 0, barrelR(44) + 0.01, 0, Math.PI * 2, true));
   s.holes.push(new THREE.Path().absarc(0, MAG_Y, 1.14, 0, Math.PI * 2, true));
-  const hanger = mesh(extrudeYZ(s, 2.6, 0.12, 40), M.steel, 43.4, 0, 0);
+  // blued like the barrel: an extrusion has no lathe tangents, so no anisotropy (it streaked white)
+  const band = M.steel.clone();
+  band.onBeforeCompile = M.steel.onBeforeCompile;
+  band.customProgramCacheKey = M.steel.customProgramCacheKey;
+  band.anisotropy = 0;
+  band.roughness = 0.4;
+  const hanger = mesh(extrudeYZ(s, 2.6, 0.12, 40), band, 43.4, 0, 0);
   // weld fillet on top
-  const fillet = mesh(rbox(2.0, 0.25, 0.9, 0.1), M.steel, 44.7, R1 - 0.05, 0);
-  A.add(group(0, 0, 0, hanger, fillet), 'barrel ring', {ex: [0, -2.4, 0], delay: 0.4});
+  const fillet = mesh(rbox(2.0, 0.25, 0.9, 0.1), band, 44.7, R1 - 0.05, 0);
+  const ringG = group(0, 0, 0, hanger, fillet);
+  // 2 clamp screws on the camera-side web, slotted heads
+  const yS = MAG_Y / 2;
+  const zS = R1 + (R2 - R1) * (yS / MAG_Y);
+  for (const x of [44.05, 45.35]) {
+    ringG.add(mesh(rcyl(0.27, 0.27, 0.14, 24), band, x, yS, zS + 0.05, Math.PI / 2, 0, 0));
+    ringG.add(mesh(rbox(0.07, 0.42, 0.06, 0.02), M.steelInner, x, yS, zS + 0.12));
+  }
+  A.add(ringG, 'barrel ring', {ex: [0, -2.4, 0], delay: 0.4});
 
   // --- choke tube at the muzzle (threads in, flush)
   const choke = latheX([[66.0, BORE - 0.005], [66.0, BORE + 0.02], [71.02, BORE + 0.02], [71.02, BORE - 0.06], [69.5, BORE - 0.07], [66.4, BORE - 0.005]], 40);

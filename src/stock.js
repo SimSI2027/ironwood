@@ -159,7 +159,7 @@ export function buildStock() {
   const M = A.M;
 
   // --- buttstock: lofted oval sections, straight comb, pistol grip, smooth belly
-  const wood = mesh(stockGeo(), M.walnut(0.0));
+  const wood = mesh(stockGeo(), M.wood());
   const stock = group(0, 0, 0, wood);
 
   // --- checkered grip panels: pointed fleur outline, diamond checkering as bump

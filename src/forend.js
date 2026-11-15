@@ -55,7 +55,7 @@ export function buildForend() {
   const all = {pump: PUMP};
 
   // --- walnut grip
-  const wood = mesh(ribbedShell(FOREND_L, 1.36, 2.08, 0.62, 9), M.walnut(2.3), FOREND_X0, MAG_Y + 0.38, 0);
+  const wood = mesh(ribbedShell(FOREND_L, 1.36, 2.08, 0.62, 9), M.wood(), FOREND_X0, MAG_Y + 0.38, 0);
   A.add(wood, 'forend', {...all, ex: [0, -4.2, 0], delay: 0.2});
 
   // --- slide tube, the steel sleeve the grip is pinned to
