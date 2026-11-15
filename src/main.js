@@ -98,8 +98,24 @@ async function main() {
 
   // --- UI
   const ui = el('div', 'iw', null, app);
-  const head = el('div', 'iw-head', '<span class="iw-brand">IRONWOOD <b>Mk I</b></span><span class="iw-dot">·</span><span class="iw-sub">Exploded view. Drag, scroll, take it apart.</span>', ui);
+  const head = el('div', 'iw-head', '<span class="iw-brand">IRONWOOD <b>Mk I</b></span><span class="iw-dot">·</span><span class="iw-sub">Drag, scroll, fire, take it apart.</span>', ui);
   const qSeg = el('span', 'iw-q', '<button data-t="high">High</button><button data-t="med">Med</button><button data-t="low">Low</button>', head);
+  // "?": a six-line controls card; any click elsewhere or Esc closes it
+  const helpBtn = el('button', 'iw-help', '?', head);
+  helpBtn.setAttribute('aria-label', 'Controls');
+  helpBtn.setAttribute('aria-expanded', 'false');
+  const help = el('div', 'iw-helpcard', [
+    ['Drag', 'orbit · scroll or pinch to zoom'],
+    ['Explode', 'take it apart, part by part'],
+    ['01-08', 'fly to an assembly, the rest dim'],
+    ['Hover / tap', 'name a part'],
+    ['Fire · Pump · Full', 'run the cycle; drag the forend to pump'],
+    ['Tour', 'a 24 s guided run; any input takes over'],
+  ].map(([k, v]) => `<div><b>${k}</b><span>${v}</span></div>`).join(''), ui);
+  const showHelp = (on) => (help.classList.toggle('on', on), helpBtn.setAttribute('aria-expanded', String(on)));
+  helpBtn.onclick = (e) => (e.stopPropagation(), showHelp(!help.classList.contains('on')));
+  addEventListener('pointerdown', (e) => !help.contains(e.target) && e.target !== helpBtn && showHelp(false));
+  addEventListener('keydown', (e) => e.key === 'Escape' && showHelp(false));
   el('div', 'iw-rule', null, ui);
   const hint = el('div', 'iw-hint', null, ui);
   const setHint = () => (hint.textContent = `${asms.length} assemblies · ${asms.reduce((n, a) => n + a.parts.length, 0)} parts · ${meshes.length} meshes · ${{high: 'HIGH', med: 'MEDIUM', low: 'LOW'}[S.tier]} quality${dropped.map((k) => ' · ' + k).join('')} · ${gpuName}`);

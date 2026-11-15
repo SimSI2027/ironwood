@@ -25,6 +25,17 @@ html, body { background: var(--iw-bg); }
   border: 0; padding: 2px 9px 3px; cursor: pointer; }
 .iw-q button:hover { color: var(--iw-fg); }
 .iw-q button.on { background: #c9a24b; color: #111; font-weight: 600; }
+.iw-help { pointer-events: auto; align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--iw-line); background: transparent;
+  color: var(--iw-dim); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; padding: 0; transition: border-color .2s, color .2s; }
+.iw-help:hover, .iw-help[aria-expanded="true"] { border-color: var(--iw-brass); color: var(--iw-brass); }
+.iw-helpcard { position: absolute; left: 28px; top: 78px; z-index: 20; padding: 12px 18px 12px 14px; border-left: 1px solid var(--iw-brass);
+  background: rgba(14, 15, 18, 0.92); font-variant-caps: normal; opacity: 0; pointer-events: none; transform: translateY(-4px);
+  transition: opacity .22s cubic-bezier(.65, 0, .35, 1), transform .22s cubic-bezier(.65, 0, .35, 1); }
+.iw-helpcard.on { opacity: 1; pointer-events: auto; transform: none; }
+.iw-helpcard div { display: flex; gap: 14px; font-size: 15px; line-height: 1.75; letter-spacing: 0.04em; white-space: nowrap; }
+.iw-helpcard b { min-width: 9.5em; color: var(--iw-brass); font-weight: 600; letter-spacing: 0.12em; font-variant-caps: all-small-caps; font-size: 16px; }
+.iw-helpcard span { color: var(--iw-fg); }
+@media (max-width: 700px) { .iw-helpcard { left: 16px; right: 16px; top: 96px; } .iw-helpcard div { white-space: normal; font-size: 14px; } .iw-helpcard b { min-width: 7.5em; } }
 .iw-rule { position: absolute; left: 28px; top: 66px; width: 220px; height: 1px; background: linear-gradient(90deg, var(--iw-brass-dim), transparent); }
 
 .iw-dock { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: min(980px, calc(100% - 32px));
