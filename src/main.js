@@ -322,12 +322,12 @@ async function main() {
   function flyTo(c, dur = 1.2) {
     fly = {t0: performance.now(), dur: dur * 1000, ft: controls.target.clone(), fp: camera.position.clone(), tt: c.t, tp: c.p};
   }
-  function focusOn(i) {
+  function focusOn(i, dur) {
     focus = i;
     dir = null;
     pillBtns.forEach((b, k) => b.classList.toggle('on', k === i));
     poseAll(st.explode, channelsAt(st.t, st.fired));
-    flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15));
+    flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15), dur);
   }
 
   // --- clock camera: a pure function of t. The FIRE keys hold each tick's active part inside the
@@ -746,16 +746,19 @@ async function main() {
       if (cyc.tw) {
         const t = clamp01((now - cyc.tw.t0) / cyc.tw.dur);
         st.t = cyc.tw.from + (cyc.tw.to - cyc.tw.from) * ease(t);
-        if (t >= 1) cyc.tw = null;
+        if (t >= 1) {
+          if (cyc.tw.to <= 0 || cyc.tw.to >= 1) focusOn(-1, 0.8); // reached Ready or Locked
+          cyc.tw = null;
+        }
       } else if (cyc.playing) {
         st.t += (dt * cyc.speed) / FULL_S;
         if (cyc.stop === FIRE_END && st.t >= FIRE_END) {
           st.t = FIRE_END; // FIRE holds at the end of the recoil, ready to pump
           cyc.playing = false;
         } else if (st.t >= 1) {
-          st.t = 0;
-          dir = null; // the camera stays at the port
+          st.t = 0; // Locked, and back to Ready: the camera eases back to the default framing over 0.8 s, all dimming clears
           cyc.playing = false;
+          focusOn(-1, 0.8);
         }
       }
     }
