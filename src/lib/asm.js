@@ -58,10 +58,11 @@ export class Asm {
 
   /**
    * Register a part. ex: fan-out offset [x, y, z] in assembly space. rot: fan-out rotation [rx, ry, rz].
-   * delay: stagger 0..1 inside the part phase. pump: [dx] cm per unit pump stroke; pumpRot: [rx, ry, rz] per unit.
+   * delay: stagger 0..1 inside the part phase. pump: dx cm per unit of the cycle channel `drive`
+   * (f forend stroke, b bolt stroke, lock, elev); pumpRot: [rx, ry, rz] per unit; drop: [dy, channel].
    * scaleX: stretch along X at full fan-out (springs).
    */
-  add(obj, name, {ex = [0, 0, 0], rot = null, delay = 0, pump = 0, pumpRot = null, scaleX = 1, parent = null, xray = false} = {}) {
+  add(obj, name, {ex = [0, 0, 0], rot = null, delay = 0, pump = 0, pumpRot = null, drive = 'f', drop = null, scaleX = 1, parent = null, xray = false} = {}) {
     obj.userData.part = name;
     obj.userData.asm = this.key;
     (parent || this.group).add(obj);
@@ -76,6 +77,8 @@ export class Asm {
       pumpRot: pumpRot ? new THREE.Euler(...pumpRot) : null,
       delay,
       pump,
+      drive,
+      drop,
       scaleX,
       xray,
     });
@@ -91,8 +94,12 @@ export class Asm {
     return obj;
   }
 
-  /** Explode e in 0..1, pump stroke p in 0..1. Assemblies split first, then parts fan out. */
-  pose(e, p = 0) {
+  /**
+   * Explode e in 0..1; k = cycle channels {f, b, lock, elev} (see cycle.js), or a number for all.
+   * Assemblies split first, then parts fan out.
+   */
+  pose(e, k = 0) {
+    if (typeof k === 'number') k = {f: k, b: k, lock: 0, elev: k};
     // stage 1 (e 0-0.5): the assemblies on the axis slide apart along it, staggered.
     // stage 2 (e 0.45-1): each assembly steps to its row (trigger drops, bolt lifts), then its parts fan out.
     const a = ease(clamp01((e - this.delay * 0.12) / 0.38));
@@ -103,7 +110,9 @@ export class Asm {
     for (const part of this.parts) {
       const b = ease(clamp01((e - 0.58 - part.delay * 0.14) / 0.28));
       part.obj.position.copy(part.ex).multiplyScalar(b).add(part.rest);
+      const p = k[part.drive] || 0;
       part.obj.position.x += part.pump * p;
+      if (part.drop) part.obj.position.y += part.drop[0] * (k[part.drop[1]] || 0);
       part.obj.quaternion.copy(part.restQ);
       if (part.rot) {
         q.identity().slerp(part.rot, b);

@@ -3,13 +3,13 @@
 import {THREE, rcyl, mesh, group, rbox, latheX, rodX, rpoly, hole, extrudeXY, extrudeXZ, spring, pinZ, merge, at} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
 import {machiningTexture} from './lib/materials.js';
-import {PUMP} from './forend.js';
+import {PUMP, BOLT_TRAVEL} from './forend.js';
 import {PIN_F} from './receiver.js';
 
 export function buildBolt() {
   const A = new Asm('bolt', 'Bolt', {offset: [-3, 9.5, 5.5], delay: 0.3, inner: true});
   const M = A.M;
-  const ride = {pump: PUMP};
+  const ride = {pump: BOLT_TRAVEL, drive: 'b'}; // the bolt moves once the locking block has dropped
 
   // --- bolt block
   // fine machining lines: surface-ground flats on the block, turned rings on the head
@@ -54,7 +54,7 @@ export function buildBolt() {
   // --- locking block: wedge in the top slot, rises into the barrel extension
   const lbS = rpoly([[-7.7, 0.55, 0.08], [-4.1, 0.55, 0.08], [-3.7, 0.98, 0.12], [-7.3, 0.98, 0.12]], 0.08);
   const lb = mesh(extrudeXY(lbS, 0.9, 0.06), M.steelSatin);
-  A.add(lb, 'locking block', {...ride, ex: [0, 2.2, 0], delay: 0.2});
+  A.add(lb, 'locking block', {...ride, drop: [-0.42, 'lock'], ex: [0, 2.2, 0], delay: 0.2});
 
   // --- extractor: claw on the right side of the bolt head, with plunger and spring
   const exS = rpoly([[-3.4, -0.18, 0.1], [-0.15, -0.18, 0.05], [0.22, 0.02, 0.06], [0.05, 0.25, 0.05], [-0.4, 0.2, 0.05], [-3.4, 0.2, 0.1]], 0.06);
@@ -83,7 +83,7 @@ export function buildBolt() {
   slide.add(mesh(cheek, M.steelSatin, 0, 0, 0.75), mesh(cheek, M.steelSatin, 0, 0, -0.75));
   // cam lug that lifts the locking block
   slide.add(mesh(rbox(1.1, 0.5, 0.8, 0.1), M.steelInner, -8.0, -0.82, 0));
-  A.add(slide, 'slide', {...ride, ex: [-1, -3.0, 0], delay: 0.05});
+  A.add(slide, 'slide', {pump: PUMP, ex: [-1, -3.0, 0], delay: 0.05}); // rides with the action bars
 
   // --- elevator: forked plate, pivots on the front pin, rear lifts on the pump stroke
   const el = group(PIN_F[0], PIN_F[1], 0);
@@ -118,6 +118,6 @@ export function buildBolt() {
   const dog = extrudeXY(rpoly([[-1.4, -0.15], [0.3, -0.15], [0.5, 0.3], [-1.2, 0.35]], 0.12), 0.16, 0.04);
   el.add(mesh(dog, M.steelBright, -1.0, 0.25, -1.12));
   el.add(mesh(pinZ(0.5, 0.08, 12), M.brass, -0.4, 0.3, -1.12));
-  A.add(el, 'elevator', {pumpRot: [0, 0, -0.3], ex: [0, -6.8, 1.0], rot: [-0.55, 0, 0], delay: 0.4});
+  A.add(el, 'elevator', {pumpRot: [0, 0, -0.3], drive: 'elev', ex: [0, -6.8, 1.0], rot: [-0.55, 0, 0], delay: 0.4});
   return A;
 }

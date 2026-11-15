@@ -13,6 +13,7 @@ import {buildTrigger} from './trigger.js';
 import {buildStock} from './stock.js';
 import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN} from './tour.js';
+import {channels, createShells} from './cycle.js';
 
 const q = new URLSearchParams(location.search);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -50,6 +51,9 @@ async function main() {
   scene.add(gun);
   const meshes = [];
   gun.traverse((o) => o.isMesh && meshes.push(o));
+  // pump-cycle shells: posed from st.c, not hoverable (added after the hover list)
+  const shells = createShells();
+  gun.add(shells.group);
 
   // --- UI
   const ui = el('div', 'iw', null, app);
@@ -130,7 +134,7 @@ async function main() {
   });
 
   // --- state
-  const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), pump: 0};
+  const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), pump: 0, c: Math.min(1, Math.max(0, Number(q.get('c') ?? 0)))};
   range.value = st.target;
   let focus = -1;
   const dim = asms.map(() => 0);
@@ -383,7 +387,9 @@ async function main() {
     }
     out.value = st.explode.toFixed(2);
     range.style.setProperty('--p', `${(st.explode * 100).toFixed(1)}%`);
-    poseAll(st.explode, st.pump);
+    const kc = tour.active ? st.pump : channels(st.c);
+    poseAll(st.explode, kc);
+    shells.pose(st.c, st.c > 0 && st.explode < 0.02);
 
     // dimming
     // dimming keeps each part's material (30% brightness, half opacity); the selection gets a brass rim
@@ -415,10 +421,10 @@ async function main() {
     else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 
     // shadows follow the parts, not the camera: re-render them only when something moved
-    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.pump - lastP) > 1e-5 || Number.isNaN(lastE)) {
+    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.pump + st.c - lastP) > 1e-5 || Number.isNaN(lastE)) {
       S.renderer.shadowMap.needsUpdate = true;
       lastE = st.explode;
-      lastP = st.pump;
+      lastP = st.pump + st.c;
     }
     if (probe && probe.t0) {
       const t0 = performance.now();
@@ -433,7 +439,7 @@ async function main() {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S};
+  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S};
 }
 
 main().catch((e) => {
