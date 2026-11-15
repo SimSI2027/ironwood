@@ -830,6 +830,7 @@ async function main() {
       a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr[i] < 0.004 ? 0 : xr[i]);
     });
     S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
+    S.cool.intensity = 0.25 * S.key.intensity; // the cool fill keeps 25% of the key
     S.renderer.toneMappingExposure = 1.08 - 0.65 * rim[3];
 
     // camera flight

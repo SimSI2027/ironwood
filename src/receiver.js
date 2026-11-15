@@ -6,6 +6,7 @@ import {Asm} from './lib/asm.js';
 import {MAG_Y} from './barrel.js';
 
 export const REC = {x0: -20.5, x1: 0, half: 1.55, wall: 0.3, top: 1.0, bottom: -5.3};
+const WALL = {color: 0x3a4658, rough: 0.5, env: 1.0};
 export const PIN_F = [-4.6, -4.35];
 export const PIN_R = [-17.6, -4.35];
 export const PORT = [-11.3, -0.4, -1.35, 0.75]; // runs nearly to the front so a 6.6 cm hull clears at 7.5 cm of travel
@@ -44,9 +45,16 @@ export function buildReceiver() {
   const left = prof();
   left.holes.push(circ(PIN_F[0], PIN_F[1], 0.21), circ(PIN_R[0], PIN_R[1], 0.21));
   const zc = half - wall / 2;
+  // the walls are big flat faces: the standard steel (anisotropy, clearcoat, mirror roughness) reflects only the
+  // dark room and reads black, so they get a rougher, lighter, isotropic variant that the key and the cool fill reach
+  const wallM = M.steel.clone();
+  wallM.onBeforeCompile = M.steel.onBeforeCompile;
+  wallM.customProgramCacheKey = M.steel.customProgramCacheKey;
+  wallM.color.set(WALL.color);
+  Object.assign(wallM, {anisotropy: 0, clearcoat: 0, roughness: WALL.rough, envMapIntensity: WALL.env});
   const body = group(0, 0, 0);
-  body.add(mesh(extrudeXY(right, wall, 0.06, 28), M.steel, 0, 0, zc));
-  body.add(mesh(extrudeXY(left, wall, 0.06, 28), M.steel, 0, 0, -zc));
+  body.add(mesh(extrudeXY(right, wall, 0.06, 28), wallM, 0, 0, zc));
+  body.add(mesh(extrudeXY(left, wall, 0.06, 28), wallM, 0, 0, -zc));
 
   // --- swept top: rounded shoulders, flat crown
   const sec = [];

@@ -96,6 +96,11 @@ export function createStage(canvas) {
   const under = new THREE.DirectionalLight(0xffe6c8, 0.35);
   under.position.set(30, -60, 90);
   scene.add(under);
+  // cool fill from the lower right at 25% of the key (main.js keeps the ratio): lifts the receiver's side
+  // wall and port edges out of black, no shadow, so it costs nothing on any tier
+  const cool = new THREE.DirectionalLight(0x9db9ff, 0.75);
+  cool.position.set(90, -50, 70);
+  scene.add(cool);
 
   // dark reflective floor (both tiers; 512 px reflection on low): a blurred planar reflection at
   // 12% that fades out within 40 cm of the gun's footprint (x -44..71, z 0), one soft elliptical
@@ -298,7 +303,7 @@ export function createStage(canvas) {
     }
     return null;
   };
-  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, key, floor: floorR, cut: {}, tier: 'high'};
+  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, key, cool, floor: floorR, cut: {}, tier: 'high'};
   S.render = () => (S.tier !== 'low' ? composer.render() : renderer.render(scene, camera));
   return S;
 }
