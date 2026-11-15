@@ -583,7 +583,7 @@ async function main() {
     }
     return null;
   }
-  const cardPos = {x: 0, y: 0, side: 1, init: false};
+  const cardPos = {x: 0, y: 0, side: 'r', init: false};
   const hb = new THREE.Box3();
   function setHover(h, centre = false) {
     if (h === hovered) return;
@@ -598,29 +598,79 @@ async function main() {
       card.children[1].textContent = !al ? 'cartridge' : al.split(' · ')[1].toLowerCase() === h.userData.part.toLowerCase() ? `assembly ${al.split(' · ')[0]}` : al;
     }
   }
-  /** Leader from the hit point: short diagonal, then a horizontal run into the card's edge. */
-  function drawLeader(dt) {
+  // the hovered part's screen bounds: up to ~300 sampled vertices per mesh, cached in the part's own
+  // space when it is hovered, projected each time the leader is drawn
+  const hoverPts = [];
+  let hoverOf = null;
+  const hv = new THREE.Vector3();
+  const hInv = new THREE.Matrix4();
+  function partBounds() {
+    hovered.updateWorldMatrix(true, false);
+    if (hoverOf !== hovered) {
+      hoverOf = hovered;
+      hoverPts.length = 0;
+      hovered.updateMatrixWorld(true);
+      hInv.copy(hovered.matrixWorld).invert();
+      hovered.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || !o.visible) return;
+        const a = o.geometry.attributes.position;
+        const k = Math.ceil(a.count / 300);
+        for (let i = 0; i < a.count; i += k) hoverPts.push(new THREE.Vector3().fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld).applyMatrix4(hInv));
+      });
+    }
+    const B = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity};
+    for (const p of hoverPts) {
+      hv.copy(p).applyMatrix4(hovered.matrixWorld).project(camera);
+      if (hv.z > 1) continue;
+      const x = (hv.x * 0.5 + 0.5) * S.size.w;
+      const y = (-hv.y * 0.5 + 0.5) * S.size.h;
+      B.x0 = Math.min(B.x0, x); B.x1 = Math.max(B.x1, x); B.y0 = Math.min(B.y0, y); B.y1 = Math.max(B.y1, y);
+    }
+    return B;
+  }
+  /**
+   * Name card 40 px clear of the part's screen bounds: right, else left, else above, else below
+   * (the current side is kept while it fits); the leader runs from the hit point out past the part's
+   * edge and on into the card's near edge.
+   */
+  function drawLeader() {
+    camera.updateMatrixWorld();
     const a = S.project(hovered.localToWorld(anchor.clone()));
+    const B = partBounds();
+    if (!(B.x1 > B.x0)) Object.assign(B, {x0: a.x, x1: a.x, y0: a.y, y1: a.y});
     const cw = card.offsetWidth;
     const ch = card.offsetHeight;
-    const phone = S.size.w < 720;
-    const dx = phone ? 34 : 54;
-    const dy = phone ? 44 : 62;
-    const side = a.x + dx + 26 + cw > S.size.w - 12 ? -1 : 1;
-    const up = a.y - dy - ch < 70 ? -1 : 1;
-    const ex = a.x + side * dx;
-    const ey = a.y - up * dy;
-    const tx = side > 0 ? ex + 26 : ex - 26 - cw;
-    const ty = Math.min(S.size.h - ch - 8, Math.max(8, ey - ch / 2));
-    const k = cardPos.init ? 1 - Math.exp(-dt * 18) : 1;
-    cardPos.x += (tx - cardPos.x) * k;
-    cardPos.y += (ty - cardPos.y) * k;
-    cardPos.init = true;
-    card.classList.toggle('flip', side < 0);
-    card.style.transform = `translate(${cardPos.x.toFixed(1)}px, ${cardPos.y.toFixed(1)}px)`;
-    const cx = side > 0 ? cardPos.x : cardPos.x + cw;
-    const cy = cardPos.y + ch / 2;
-    lLine.setAttribute('points', `${a.x},${a.y} ${ex},${cy} ${cx},${cy}`);
+    const W = S.size.w;
+    const H = S.size.h;
+    const G = 42; // 40 px clear of the part, with 2 px for the vertex sampling
+    const E = 8; // clear of the viewport edge
+    const lift = S.size.w < 720 ? 20 : 32; // the card sits a little above the hit point: a diagonal, then a run
+    const fits = {r: B.x1 + G + cw <= W - E, l: B.x0 - G - cw >= E, t: B.y0 - G - ch >= E, b: B.y1 + G + ch <= H - E};
+    const room = {r: W - E - B.x1 - cw, l: B.x0 - E - cw, t: B.y0 - E - ch, b: H - E - B.y1 - ch};
+    const side = fits[cardPos.side] ? cardPos.side : ['r', 'l', 't', 'b'].find((k) => fits[k]) || Object.keys(room).sort((p, q) => room[q] - room[p])[0];
+    cardPos.side = side;
+    const cl = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    let x;
+    let y;
+    let pts;
+    if (side === 'r' || side === 'l') {
+      x = side === 'r' ? B.x1 + G : B.x0 - G - cw;
+      y = cl(a.y - lift - ch / 2, E, H - ch - E);
+      const cy = y + ch / 2;
+      const ex = side === 'r' ? B.x1 + 14 : B.x0 - 14;
+      pts = [[a.x, a.y], [ex, cy], [side === 'r' ? x : x + cw, cy]];
+    } else {
+      y = side === 't' ? B.y0 - G - ch : B.y1 + G;
+      x = cl(a.x - cw / 2, E, W - cw - E);
+      const cx = x + cw / 2;
+      const ey = side === 't' ? B.y0 - 14 : B.y1 + 14;
+      pts = [[a.x, a.y], [cx, ey], [cx, side === 't' ? y + ch : y]];
+    }
+    cardPos.x = x;
+    cardPos.y = y;
+    card.classList.toggle('flip', side === 'l');
+    card.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    lLine.setAttribute('points', pts.map((p) => p.map((v) => v.toFixed(1)).join(',')).join(' '));
     for (const c of [lDot, lHalo]) {
       c.setAttribute('cx', a.x);
       c.setAttribute('cy', a.y);
@@ -798,7 +848,7 @@ async function main() {
       setHover(null);
     }
     canvas.style.cursor = drag ? 'grabbing' : canDrag(hovered) ? 'grab' : '';
-    if (hovered) drawLeader(dt);
+    if (hovered) drawLeader();
     else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 
     // shadows follow the parts, not the camera: re-render them only when something moved
@@ -879,7 +929,7 @@ async function main() {
   MARKS.shaders = performance.now();
   load.remove();
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame, clockCam, partByName, TICKS, tickAt}; // controls + frame: for the hero and check shots
+  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame, clockCam, partByName, TICKS, tickAt, get hovered() { return hovered; }}; // controls + frame: for the hero and check shots
 }
 
 main().catch((e) => {
