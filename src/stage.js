@@ -10,6 +10,7 @@ import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {Reflector} from 'three/addons/objects/Reflector.js';
+import {setEnvironment} from './lib/materials.js';
 
 // The background is a CSS gradient (#15171c -> #07080a) behind a transparent canvas, so its
 // colours are exact on both tiers; the floor fades to transparent into it.
@@ -63,7 +64,12 @@ export function createStage(canvas) {
 
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  // the room's four side panels (-x, -x, +x, +z, -z; not the +y top light) at 60%, so only the
+  // top-left key reads as a highlight on steel and walnut
+  const room = new RoomEnvironment();
+  room.traverse((o) => o.isMesh && o.material.emissiveIntensity > 0 && o.position.y < 19 && (o.material.emissiveIntensity *= 0.6));
+  scene.environment = pmrem.fromScene(room, 0.04).texture;
+  setEnvironment(scene.environment);
   scene.environmentIntensity = 0.95;
 
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 2500);

@@ -11,6 +11,12 @@ float wNoise(vec3 x){
 float wFbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++){ s += a * wNoise(p); p = p * 2.03 + 11.7; a *= 0.5; } return s; }
 `;
 
+// The studio's PMREM, set by the stage before any assembly is built. three.js overrides
+// material.envMapIntensity with scene.environmentIntensity unless the material holds its own envMap,
+// so the steel and wood take it directly and their envMapIntensity counts.
+let ENV = null;
+export function setEnvironment(tex) { ENV = tex; }
+
 /** GLSL: soft-caps the lit colour's luminance under the bloom threshold (0.9), so the surface never blooms. */
 export const NO_BLOOM = /* glsl */ `{ float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
   if (lum > 0.6) outgoingLight *= (0.6 + 0.28 * (1.0 - exp(-(lum - 0.6) / 0.28))) / lum; }`;
@@ -35,8 +41,10 @@ export function walnut({seed = 0, dark = 0, bump = null, bumpScale = 0} = {}) {
     color: 0xffffff,
     roughness: 0.5,
     metalness: 0,
-    clearcoat: 0.3,
-    clearcoatRoughness: 0.22,
+    clearcoat: 0.15,
+    clearcoatRoughness: 0.4,
+    envMap: ENV,
+    envMapIntensity: 0.25,
     sheen: 0.25,
     sheenRoughness: 0.6,
     sheenColor: new THREE.Color(0x5a2c12),
@@ -240,19 +248,21 @@ export function makeMaterials() {
       anisotropy: 0.6,
       clearcoat: 0.2,
       clearcoatRoughness: 0.16,
+      envMap: ENV,
+      envMapIntensity: 0.6,
     }),
   );
   const M = {
     steel, // deep blued gunmetal
-    steelSatin: worn(new THREE.MeshPhysicalMaterial({color: 0x30353d, metalness: 1, roughness: 0.42, anisotropy: 0.45}), {wear: 0.8}),
-    steelBright: worn(new THREE.MeshPhysicalMaterial({color: 0x9aa2ad, metalness: 1, roughness: 0.24, anisotropy: 0.7}), {wear: 0.5, bare: 0xc4cad1, mottle: 0.3}), // bolt, in the white
-    steelInner: new THREE.MeshStandardMaterial({color: 0x1a1d22, metalness: 1, roughness: 0.48}),
-    alloy: worn(new THREE.MeshPhysicalMaterial({color: 0x23262c, metalness: 0.8, roughness: 0.42, clearcoat: 0.15}), {wear: 0.7, bare: 0x7b7f86}), // anodised housing
+    steelSatin: worn(new THREE.MeshPhysicalMaterial({color: 0x30353d, metalness: 1, roughness: 0.42, anisotropy: 0.45, envMap: ENV, envMapIntensity: 0.6}), {wear: 0.8}),
+    steelBright: worn(new THREE.MeshPhysicalMaterial({color: 0x9aa2ad, metalness: 1, roughness: 0.24, anisotropy: 0.7, envMap: ENV, envMapIntensity: 0.6}), {wear: 0.5, bare: 0xc4cad1, mottle: 0.3}), // bolt, in the white
+    steelInner: new THREE.MeshStandardMaterial({color: 0x1a1d22, metalness: 1, roughness: 0.48, envMap: ENV, envMapIntensity: 0.6}),
+    alloy: worn(new THREE.MeshPhysicalMaterial({color: 0x23262c, metalness: 0.8, roughness: 0.42, clearcoat: 0.15, envMap: ENV, envMapIntensity: 0.6}), {wear: 0.7, bare: 0x7b7f86}), // anodised housing
     brass: new THREE.MeshPhysicalMaterial({color: 0xc29a48, metalness: 1, roughness: 0.27, anisotropy: 0.3}),
     rubber: new THREE.MeshPhysicalMaterial({color: 0x0f1012, metalness: 0, roughness: 0.82, sheen: 0.4, sheenRoughness: 0.8, sheenColor: new THREE.Color(0x2a2c30)}),
     polymer: new THREE.MeshPhysicalMaterial({color: 0x121315, metalness: 0, roughness: 0.55, clearcoat: 0.1}),
     bore: new THREE.MeshStandardMaterial({color: 0x07080a, metalness: 1, roughness: 0.35}),
-    rib: new THREE.MeshPhysicalMaterial({color: 0x1f252e, metalness: 1, roughness: 0.55, bumpMap: lineTexture(), bumpScale: 1.2}),
+    rib: new THREE.MeshPhysicalMaterial({color: 0x1f252e, metalness: 1, roughness: 0.55, bumpMap: lineTexture(), bumpScale: 1.2, envMap: ENV, envMapIntensity: 0.6}),
     walnut: (seed, opt) => walnut({seed, ...opt}),
     // the one walnut of the forend and the stock: same two tones, figure and grain scale (an
     // instance per assembly only so each can dim on its own)
