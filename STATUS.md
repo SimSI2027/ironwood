@@ -1,9 +1,10 @@
-# STATUS - 2026-11-15, session 11 (stored tier, render cost, framing, receiver light)
-- Tier: stored under "ironwood.tier.v2", written only by a click on the toggle; tiers saved by earlier builds (ironwood.q) are ignored (checked: old key low -> starts HIGH by GPU).
-- Adaptive = render cost: GPU time of S.render() (timer query; ?perf=1 sums its pass queries), floored by the CPU time of the call; median > 20 ms over 1 s of drawn frames (>= 8). Skipped frames never count. RENDER_MS=10: no step; RENDER_MS=25: steps; THROTTLE=4 cycle: no reflection.
-- Framing: the resting view was already 8.00% left/right at 1189x940, 1920x935, 1280x720, 390x844 (all 152,587 vertices). The clip was the idle auto-turn (360 deg at a fixed distance, -2.4% at 1189x940); it now dollies out just enough (26-direction hull per mesh, eased, never in).
-- Full orbit, all vertices, worst side margin: 8.06 / 8.12 / 8.08 / 8.13% at the four sizes.
-- Receiver: cool fill (lower right, 25% of the key, follows the receiver close-up) + lighter, rougher, isotropic wall steel. Luminance wall 5.6 -> 33, top flat 50, port edges 105-120 on HIGH, MED, LOW, shadows off; close-up peaks at 233 (< 92%).
-- Look first 1) tones were measured headless on a 4090 as luminance of 3 regions; not seen on integrated graphics.
-- 2) Without the timer extension (Safari, Firefox) cost is the CPU time of the render call, which under-reads a slow GPU.
-- 3) The turn builds its hull at turn start (~150k vertices, one long frame while idle). D3D warning X4122 predates this. IRONWOOD_JOB.md is still untracked.
+# STATUS - 2026-11-15, session 12 (final build run, v2.0)
+- Shipped: 13 items + a 5-defect fix commit; tag v2.0 pushed; https://simsi2027.github.io/ironwood/ (and hero.png, preview.gif, ironwood.mp4) return 200 with the new build.
+- AA: scene pass in its own MSAA target (8 HIGH / 4 MED), SMAA last on every tier (LOW now goes through the composer); DPR 2 / 1.5 / 1; outline full-res ~2 px. Creased normals (35 deg), 48-radial tubes, 24x12 springs, aniso 8.
+- Camera: one rule, subject = 80% of the usable area: scripts/framing.mjs, every vertex, 25 states x 3 sizes in 70-85%. Idle = +/-20 deg sway (2.8-42.8 deg azimuth), no orbit. Tweens are cubic in-out; quality steps cross-fade.
+- Grounding trade-off: the floor rose to -22 and the contact shadow must stay in view, so on short-wide screens (1902x935, 1280x720) the gun sits 15% above centre; it is centred at 1189x940 and 390x844.
+- Receiver wall: a set light-to-dark reflection sweep (not the room's), luminance 30 -> 21 rear to front on all tiers (scripts/lum.mjs); one sample at x -19 still reads ~55, cause not found.
+- Exploded view: fill +30%, 8 labels clear of parts and each other at 4 sizes; leaders: 0 crossings at the 3 check sizes, 1 left at 800x500.
+- Muzzle: soft 15 cm bloom + short puff; found and fixed SSAO blacking out sprite quads on HIGH; Recoil tick label moved to 0.235 so the Muzzle tick covers the flash.
+- Film: ?render + window.seek for capture.mjs; mp4 1920x1080 60 fps 12 s (7.6 MB), gif 640 px 15 fps (5.7 MB). Hero re-shot from film mode.
+- Risks: 8x MSAA at DPR 2 is heavy on big screens (adaptive steps cover it); full-res outline cost ~20 ms in a throttled perf run; nothing seen on integrated GPUs. IRONWOOD_JOB.md still untracked.
