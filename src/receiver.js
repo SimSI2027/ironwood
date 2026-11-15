@@ -65,7 +65,19 @@ export function buildReceiver() {
   // built clockwise, reversed to counter-clockwise in (n, z) so the normals face out
   const topSec = sec.slice().reverse();
   const top = sweepXY(topSec, topPath());
-  body.add(mesh(top, M.steel));
+  // the crown is a sweep without tangents, so anisotropy streaks its highlight to white: no
+  // anisotropy and rougher steel, same worn edges
+  const crownM = M.steel.clone();
+  crownM.onBeforeCompile = M.steel.onBeforeCompile;
+  crownM.customProgramCacheKey = M.steel.customProgramCacheKey;
+  crownM.anisotropy = 0;
+  crownM.roughness = 0.45;
+  body.add(mesh(top, crownM));
+  const hw = M.steelBright.clone(); // screw heads and pins: same wear, but no clipped specular in the close-up
+  hw.onBeforeCompile = M.steelBright.onBeforeCompile;
+  hw.customProgramCacheKey = M.steelBright.customProgramCacheKey;
+  hw.anisotropy = 0;
+  hw.roughness = 0.6;
   // matted flat on the crown
   const flat = mesh(rbox(15.6, 0.03, 1.0, 0.01), M.rib, -8.2, REC.top + th + 0.006, 0);
   flat.material.bumpMap.repeat.set(1, 4);
@@ -96,7 +108,7 @@ export function buildReceiver() {
     for (const [x, y, a] of scr) {
       const g = group(x, y, s * (half - 0.005));
       g.rotation.y = -s * Math.PI / 2; // lathe +X -> outward
-      g.add(mesh(head, M.steelBright));
+      g.add(mesh(head, hw));
       g.add(mesh(slotG, M.steelInner, 0.12, 0, 0, a + s, 0, 0));
       body.add(g);
     }
@@ -114,7 +126,7 @@ export function buildReceiver() {
   // --- shell latches: thin bent plates at the bottom front, one each side
   const latch = (s) => {
     const sh = rpoly([[-6.6, -0.25, 0.1], [-1.2, -0.25, 0.1], [-0.6, -0.6, 0.15], [-0.4, -0.2, 0.1], [-1.3, 0.25, 0.1], [-6.6, 0.25, 0.1]], 0.1);
-    const g = group(0, -3.65, s * (half - wall - 0.08), mesh(extrudeXY(sh, 0.1, 0.03), M.steelBright));
+    const g = group(0, -3.65, s * (half - wall - 0.08), mesh(extrudeXY(sh, 0.1, 0.03), hw));
     // staking dimple seen from outside
     g.add(mesh(rcyl(0.16, 0.16, 0.04, 16), M.steelSatin, -5.6, 0, s * 0.39, Math.PI / 2, 0, 0));
     return g;

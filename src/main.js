@@ -546,6 +546,8 @@ async function main() {
       rim[i] += ((focus === i ? 1 : 0) - rim[i]) * kd;
       a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr < 0.004 ? 0 : xr);
     });
+    S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
+    S.renderer.toneMappingExposure = 1.08 - 0.65 * rim[3];
 
     // camera flight
     if (fly && !tour.active) {
