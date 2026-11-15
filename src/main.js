@@ -207,12 +207,22 @@ async function main() {
 
   const HERO_DIR = new THREE.Vector3(0.42, 0.3, 1);
   const poseAll = (e, p) => asms.forEach((a) => a.pose(e, p));
-  /** World corners of every visible mesh's own box: much tighter than one box round a long gun. */
-  function pointsOf(obj) {
+  /**
+   * World corners of every visible mesh's own box: much tighter than one box round a long gun.
+   * verts: the mesh's own vertices instead (up to ~1500 each), so the framing margins are measured
+   * from the real surfaces (the pad's back face, the muzzle), not from box corners past them.
+   */
+  function pointsOf(obj, verts = false) {
     gun.updateMatrixWorld(true);
     const pts = [];
     obj.traverse((o) => {
       if (!o.isMesh || !o.visible) return;
+      if (verts && !o.isInstancedMesh) {
+        const a = o.geometry.attributes.position;
+        const s = Math.ceil(a.count / 1500);
+        for (let i = 0; i < a.count; i += s) pts.push(new THREE.Vector3().fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld));
+        return;
+      }
       if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
       const b = o.geometry.boundingBox;
       for (let k = 0; k < 8; k++) pts.push(new THREE.Vector3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z).applyMatrix4(o.matrixWorld));
@@ -226,14 +236,14 @@ async function main() {
     const bot = dock.getBoundingClientRect().top - 6;
     const lo = 1 - (2 * bot) / h;
     const hi = 1 - (2 * top) / h;
-    return hi - lo > 0.5 ? [lo, hi] : [-1, 1];
+    return [lo, Math.max(hi, lo + 0.3)]; // the dock (cycle panel included) is never part of the usable area
   }
   /**
-   * Camera {t, p} looking along dir with every point of obj inside the free band, 8% of the
-   * viewport clear on each side, at any aspect. fill > 1 backs off further.
+   * Camera {t, p} looking along dir with every vertex of obj inside the free band (header and
+   * dock excluded), 8% of the viewport clear on each side, at any aspect. fill > 1 backs off further.
    */
   function frame(obj, dir = new THREE.Vector3(0.38, 0.3, 1), fill = 1, adjust = true) {
-    const pts = pointsOf(obj);
+    const pts = pointsOf(obj, true);
     dir = dir.clone();
     if (adjust && camera.aspect < 0.8) dir.x += 0.6; // portrait: look further along the axis
     dir.normalize();
