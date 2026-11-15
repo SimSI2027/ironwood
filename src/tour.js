@@ -43,7 +43,7 @@ export function createTour({asms, poseAll, frame, gun, clockCam}) {
     const hero = frame(gun, new THREE.Vector3(0.42, 0.3, 1));
     const rec = clockCam(1, true); // where the clock beat ends: the port
     poseAll(0.7, 0);
-    const parts = asms.map((a) => frame(a.group, new THREE.Vector3(0.45, 0.36, 1), 1.15));
+    const parts = asms.map((a) => frame(a.group, new THREE.Vector3(0.45, 0.36, 1)));
     poseAll(1, 0);
     const all = frame(gun, new THREE.Vector3(0.3, 0.32, 1));
     poseAll(0, 0);

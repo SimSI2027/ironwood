@@ -225,15 +225,15 @@ async function main() {
   controls.minDistance = 12;
   controls.maxDistance = 760;
   controls.maxPolarAngle = Math.PI * 0.62;
-  controls.autoRotateSpeed = 0.45;
   controls.zoomSpeed = 0.9;
   let lastInput = performance.now();
-  let fly = null;
   controls.addEventListener('start', () => {
-    lastInput = performance.now();
-    fly = null;
-    dir = null;
     if (tour.active) stopTour();
+    lastInput = performance.now();
+    view.user = true; // the visitor orbits or zooms: OrbitControls has the camera until 5 s idle
+    view.follow = null;
+    view.base = null;
+    dir = null;
   });
 
   // --- state
@@ -280,31 +280,103 @@ async function main() {
     });
     return pts;
   }
-  /** NDC y range of the free band between the header and the dock. */
-  function band() {
-    const h = S.size.h;
-    const top = Math.max(head.getBoundingClientRect().bottom, hint.offsetParent ? hint.getBoundingClientRect().bottom : 0) + 6;
-    const bot = dock.getBoundingClientRect().top - 6;
-    const lo = 1 - (2 * bot) / h;
-    const hi = 1 - (2 * top) / h;
-    return [lo, Math.max(hi, lo + 0.3)]; // the dock (cycle panel included) is never part of the usable area
+  // --- one framing rule for every state. Usable area = the viewport minus the header (and its stats
+  // line), the bottom panel and the perf overlay. The subject's projected bounds fill FILL of the usable
+  // width or height (whichever binds), centred in it: the whole gun (every part, at any explode), an
+  // assembly for a pill, the active part plus 60% of the gun for a FIRE or PUMP tick.
+  const FILL = 0.8;
+  /** Usable rectangle in CSS px. */
+  function usable() {
+    const W = S.size.w;
+    const H = S.size.h;
+    const r = {l: 0, r: W, t: Math.max(head.getBoundingClientRect().bottom, hint.offsetParent ? hint.getBoundingClientRect().bottom : 0) + 6, b: dock.getBoundingClientRect().top - 6};
+    const pb = document.querySelector('.iw-perf')?.getBoundingClientRect();
+    if (pb && pb.width) {
+      // drop whichever strip (beside or below the overlay) leaves the larger rectangle
+      const beside = (Math.min(r.r, pb.left - 8) - r.l) * (r.b - r.t);
+      const below = (r.r - r.l) * (r.b - Math.max(r.t, pb.bottom + 6));
+      if (beside >= below) r.r = Math.min(r.r, pb.left - 8);
+      else r.t = Math.max(r.t, pb.bottom + 6);
+    }
+    if (r.b - r.t < 0.25 * H) r.b = r.t + 0.25 * H;
+    return r;
   }
-  /** The NDC window the gun must stay inside: 8% of the viewport clear on each side, header and dock excluded; or the central share `inner`. */
-  function windowOf(inner = 0) {
-    const m = 0.16; // 8% of the viewport on each side, in NDC units
-    const [b0, b1] = band();
-    const a0 = b0 - 12 / S.size.h; // the dock's top edge (band() keeps 6 px clear of it)
-    const my = ((1 - a0) * (1 - inner)) / 2;
-    return inner ? {x0: -inner, x1: inner, y0: a0 + my, y1: 1 - my} : {x0: -1 + m, x1: 1 - m, y0: b0 + m, y1: b1 - m};
+  /** The NDC window the subject's bounds are fitted to: FILL of the usable area, centred. */
+  function windowOf(fill = FILL) {
+    const U = usable();
+    const W = S.size.w;
+    const H = S.size.h;
+    const cx = (U.l + U.r) / 2, cy = (U.t + U.b) / 2, hw = ((U.r - U.l) * fill) / 2, hh = ((U.b - U.t) * fill) / 2;
+    return {x0: ((cx - hw) / W) * 2 - 1, x1: ((cx + hw) / W) * 2 - 1, y0: 1 - ((cy + hh) / H) * 2, y1: 1 - ((cy - hh) / H) * 2};
+  }
+  // each mesh's 26-direction hull in its own space, cached: a few thousand world points per frame bound the
+  // whole gun like its ~150k vertices, so the framing can follow the explode slider and the sway every frame
+  const DIRS = [];
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) if (i || j || k) DIRS.push(new THREE.Vector3(i, j, k).normalize());
+  function hullOf(o) {
+    if (o.userData.hull) return o.userData.hull;
+    const a = o.geometry.attributes.position;
+    const best = new Float64Array(DIRS.length).fill(-Infinity);
+    const arg = DIRS.map(() => new THREE.Vector3());
+    const v = new THREE.Vector3();
+    for (let i = 0; i < a.count; i++) {
+      v.fromBufferAttribute(a, i);
+      for (let d = 0; d < DIRS.length; d++) {
+        const dot = v.dot(DIRS[d]);
+        if (dot > best[d]) (best[d] = dot), arg[d].copy(v);
+      }
+    }
+    return (o.userData.hull = arg);
   }
   /**
-   * Camera {t, p} looking along dir with every vertex of obj inside the free band (header and
-   * dock excluded), 8% of the viewport clear on each side, at any aspect. fill > 1 backs off further.
-   * inner > 0: inside the central share `inner` of the whole area above the dock instead (both axes).
-   * obj: an object, or a list of objects and point arrays.
+   * World points bounding obj (an object, a point array, {obj, slab}, or a list of those). verts: every
+   * vertex instead of the hulls (for measuring). slab [xa, xb]: only the gun between those gun-space x,
+   * meshes crossing an end clipped to it (the "60% of the gun" around a tick's part).
    */
-  function frame(obj, dir = new THREE.Vector3(0.38, 0.3, 1), fill = 1, adjust = true, inner = 0) {
-    const pts = [obj].flat().flatMap((o) => (Array.isArray(o) ? o.map((p) => p.clone()) : pointsOf(o, true)));
+  function subjectPts(obj, verts = false) {
+    gun.updateMatrixWorld(true);
+    const out = [];
+    const v = new THREE.Vector3();
+    for (let o of [obj].flat()) {
+      if (!o) continue;
+      if (o.isVector3) {
+        out.push(o.clone());
+        continue;
+      }
+      if (Array.isArray(o)) {
+        out.push(...o.map((p) => p.clone()));
+        continue;
+      }
+      const slab = o.slab || null;
+      if (slab) o = o.obj;
+      o.traverse((m) => {
+        if (!m.isMesh || m.isLineSegments) return;
+        for (let p = m; p; p = p.parent) if (!p.visible) return;
+        let pts;
+        if (m.isInstancedMesh) pts = pointsOf(m);
+        else if (verts) {
+          const a = m.geometry.attributes.position;
+          pts = [];
+          for (let i = 0; i < a.count; i++) pts.push(v.fromBufferAttribute(a, i).clone().applyMatrix4(m.matrixWorld));
+        } else pts = hullOf(m).map((p) => p.clone().applyMatrix4(m.matrixWorld));
+        if (slab) {
+          const loc = pts.map((p) => gun.worldToLocal(p.clone()));
+          let lo = Infinity, hi = -Infinity;
+          for (const p of loc) (lo = Math.min(lo, p.x)), (hi = Math.max(hi, p.x));
+          if (hi < slab[0] || lo > slab[1]) return;
+          pts = loc.map((p) => gun.localToWorld(p.setX(Math.min(slab[1], Math.max(slab[0], p.x)))));
+        }
+        for (const p of pts) out.push(p);
+      });
+    }
+    return out;
+  }
+  /**
+   * Camera {t, p} looking along dir with the subject's bounds filling the window (FILL of the usable
+   * area, centred), at any aspect. fill > 1 backs off further. obj: anything subjectPts takes.
+   */
+  function frame(obj, dir = HERO_DIR, fill = 1, adjust = true) {
+    const pts = subjectPts(obj);
     dir = dir.clone();
     if (adjust && camera.aspect < 0.8) dir.x += 0.6; // portrait: look further along the axis
     dir.normalize();
@@ -313,7 +385,7 @@ async function main() {
     const u = new THREE.Vector3().crossVectors(r, f);
     const ty = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     const tx = ty * camera.aspect;
-    const W = windowOf(inner);
+    const W = windowOf();
     const c = new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
     const P = pts.map((p) => {
       p.sub(c);
@@ -321,7 +393,7 @@ async function main() {
     });
     let ox = 0;
     let oy = 0;
-    let D = Math.max(...P.map((q) => Math.hypot(q[0], q[1]))) / Math.min(tx, ty) * 1.5 + 1;
+    let D = (Math.max(...P.map((q) => Math.hypot(q[0], q[1]))) / Math.min(tx, ty)) * 1.5 + 1;
     for (let it = 0; it < 16; it++) {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
       for (const q of P) {
@@ -337,146 +409,81 @@ async function main() {
     const t = c.clone().addScaledVector(r, ox).addScaledVector(u, oy);
     return {t, p: t.clone().addScaledVector(dir, D * fill)};
   }
-  // --- the idle auto-turn orbits the whole gun: the camera backs off (never in) by just enough that every
-  // mesh keeps its 8% margin at every azimuth. fitPts: the extreme world vertices of each visible mesh along
-  // 26 directions (a few thousand points that bound the gun like all of its ~150k vertices).
-  const DIRS = [];
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) if (i || j || k) DIRS.push(new THREE.Vector3(i, j, k).normalize());
-  function hullPoints() {
-    gun.updateMatrixWorld(true);
-    const pts = [];
-    const v = new THREE.Vector3();
-    const best = new Float64Array(DIRS.length);
-    const arg = DIRS.map(() => new THREE.Vector3());
-    gun.traverse((o) => {
-      if (!o.isMesh || !o.visible) return;
-      if (o.isInstancedMesh) return pts.push(...pointsOf(o));
-      best.fill(-Infinity);
-      const a = o.geometry.attributes.position;
-      for (let i = 0; i < a.count; i++) {
-        v.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
-        for (let d = 0; d < DIRS.length; d++) {
-          const dot = v.x * DIRS[d].x + v.y * DIRS[d].y + v.z * DIRS[d].z;
-          if (dot > best[d]) (best[d] = dot), arg[d].copy(v);
-        }
-      }
-      for (const p of arg) pts.push(p.clone());
-    });
-    return pts;
+  // --- auto camera. view.user: the visitor is orbiting (OrbitControls drives it). Otherwise the camera is
+  // the framing rule along view.base (the visitor's own direction, kept when the explode slider reframes
+  // after an orbit) or the hero / pill direction, swayed +/-20 deg about the vertical while idle (never a
+  // full orbit, never end-on). follow: a cubic in-out blend from where the camera was into the live framing.
+  const PILL_DIR = new THREE.Vector3(0.42, 0.34, 1);
+  const SWAY = 0;
+  const SWAY_P = 24; // s per sway cycle
+  const view = {user: false, base: null, follow: null, phase: 0, env: tween(0, 1.6)};
+  const swayDir = (d, a) => d.clone().applyAxisAngle(camera.up, a);
+  const autoSubject = () => (focus >= 0 ? asms[focus].group : gun);
+  const autoDir = () => swayDir(view.base || (focus >= 0 ? PILL_DIR : HERO_DIR), SWAY * view.env.v * Math.sin(view.phase));
+  function followFrom(dur = 0.9) {
+    view.follow = {from: {t: controls.target.clone(), p: camera.position.clone()}, t0: performance.now(), dur: dur * 1000};
   }
-  let fitS = 1; // the extra dolly (>= 1) the auto-turn has added to the camera's offset from its target
-  let fitPts = null;
-  let fitW = null;
-  /** Smallest offset scale (>= 1) that keeps every fitPts point inside the window, for the camera as it is now. */
-  function fitNeed() {
-    const c = camera.position;
-    const t = controls.target;
-    const D0 = c.distanceTo(t);
-    camera.updateMatrixWorld();
-    const e = camera.matrixWorld.elements;
-    const ty = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    const tx = ty * camera.aspect;
-    const W = fitW;
-    let s = 1;
-    for (const p of fitPts) {
-      const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z;
-      const x = dx * e[0] + dy * e[1] + dz * e[2];
-      const y = dx * e[4] + dy * e[5] + dz * e[6];
-      const z = -(dx * e[8] + dy * e[9] + dz * e[10]);
-      const lx = x > 0 ? W.x1 : W.x0;
-      const ly = y > 0 ? W.y1 : W.y0;
-      if (lx * x > 0) s = Math.max(s, 1 + (x / (lx * tx) - z) / D0);
-      if (ly * y > 0) s = Math.max(s, 1 + (y / (ly * ty) - z) / D0);
-    }
-    return s;
+  function flyTo(dur = 1.2) {
+    view.user = false;
+    view.base = null;
+    followFrom(dur);
   }
-  function unfit() {
-    if (fitS !== 1) camera.position.sub(controls.target).multiplyScalar(1 / fitS).add(controls.target);
-  }
-  function fit(dt) {
-    const turn = controls.autoRotate;
-    let want = 1;
-    if (turn) {
-      fitPts ||= hullPoints();
-      fitW ||= Object.fromEntries(Object.entries(windowOf()).map(([k, v]) => [k, v * 0.996])); // 0.4% inside: the 26-direction hull is a hair short of the true vertices
-      want = fitNeed();
-    } else fitPts = fitW = null;
-    fitS += (want - fitS) * (1 - Math.exp(-dt * (want > fitS ? 6 : 2)));
-    if (!turn && fitS < 1.0005) fitS = 1;
-    if (fitS !== 1) camera.position.sub(controls.target).multiplyScalar(fitS).add(controls.target);
-  }
-  function flyTo(c, dur = 1.2) {
-    fly = {t0: performance.now(), dur: dur * 1000, ft: controls.target.clone(), fp: camera.position.clone(), tt: c.t, tp: c.p};
-  }
-  function focusOn(i, dur) {
+  function focusOn(i, dur = 1.2) {
     focus = i;
     dir = null;
     pillBtns.forEach((b, k) => b.classList.toggle('on', k === i));
-    poseAll(st.explode, channelsAt(st.t, st.fired));
-    flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15), dur);
+    flyTo(dur);
   }
 
-  // --- clock camera: a pure function of t. The FIRE keys hold each tick's active part inside the
-  // central 60% of the area above the panel (framed at 54%, room for the recoil): a close-up on
-  // trigger, hammer, firing pin and chambered shell for Press-Burn, out by the end of Burn; for Travel a side-on view of the
-  // whole gun that pans with the shot (the muzzle ends at 76% of the width, 90% of the gun on screen);
-  // the whole gun inside the central 60% for Muzzle-Recoil; then the port for the eject. Keys are
-  // framed on the assembled gun at rest.
+  // --- clock camera: a pure function of t. Each tick's key frames its part plus the 60% of the gun
+  // centred on it (clipped to the gun's ends), posed at the tick's start; Ready and Locked frame the whole
+  // gun. The camera holds a key for the first 35% of its tick, then eases (cubic in-out) to the next.
   let ckeys = null;
   let dir = null; // {from, t0}: the camera follows the clock (FIRE/PUMP/FULL, scrubber, step)
-  const IN = 0.54;
-  const SIDE = new THREE.Vector3(0.15, 0.22, 1);
+  /** The gun kicked back by rk (0..1) and its muzzle risen about the shoulder pivot. */
+  function recoil(rk) {
+    const th = RECOIL.rise * rk;
+    const pv = RECOIL.pivot;
+    gun.rotation.z = th;
+    gun.position.set(-12 - RECOIL.kick * rk + pv.x - (pv.x * Math.cos(th) - pv.y * Math.sin(th)), pv.y - (pv.x * Math.sin(th) + pv.y * Math.cos(th)), 0);
+  }
+  function clockSubject(ti) {
+    const tk = TICKS[ti];
+    if (tk.name === 'Ready' || tk.name === 'Locked') return gun;
+    const part = partByName(tk.part);
+    const loc = subjectPts(gun).map((p) => gun.worldToLocal(p));
+    let g0 = Infinity, g1 = -Infinity;
+    for (const p of loc) (g0 = Math.min(g0, p.x)), (g1 = Math.max(g1, p.x));
+    const L = (g1 - g0) * 0.6;
+    const pc = part ? gun.worldToLocal(new THREE.Box3().setFromPoints(subjectPts(part)).getCenter(new THREE.Vector3())).x : (g0 + g1) / 2;
+    const xa = Math.min(Math.max(pc - L / 2, g0), g1 - L);
+    return [{obj: gun, slab: [xa, xa + L]}, part];
+  }
   function clockKeys() {
     const gp = gun.position.clone();
     const gr = gun.rotation.z;
-    gun.position.set(-12, 0, 0);
-    gun.rotation.z = 0;
-    poseAll(0, 0);
-    gun.updateMatrixWorld(true);
-    const whole = frame(gun, SIDE, 1, true, IN);
-    // close-up: the trigger, the hammer cocked and fallen, the firing pin, the chambered shell
-    shells.pose(0.12, false, true);
-    const parts = ['trigger', 'hammer', 'firing pin'].map(partByName);
-    const cocked = pointsOf(parts[1], true);
-    poseAll(0, {f: 0, b: 0, lock: 0, elev: 0, ham: 1, trig: 1, pin: 1});
-    const close = frame([...parts, cocked, shells.chambered()], new THREE.Vector3(0.2, 0.12, 1), 1, true, IN);
-    poseAll(0, 0);
-    // Travel: the whole gun side-on, then panned along camera right as the shot passes the centre
-    const trav = frame(gun, SIDE);
-    const camA = camera.clone();
-    camA.position.copy(trav.p);
-    camA.lookAt(trav.t);
-    camA.updateMatrixWorld();
-    const ndcX = (x) => gun.localToWorld(new THREE.Vector3(x, 0, 0)).project(camA).x;
-    const xm = ndcX(MUZZLE);
-    const right = new THREE.Vector3().setFromMatrixColumn(camA.matrixWorld, 0);
-    const panW = (xm - 0.52) * trav.p.distanceTo(trav.t) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
-    const track = (t) => {
-      const w = clamp01(ndcX(shotX(t)) / xm);
-      const o = right.clone().multiplyScalar(panW * w);
-      return {t: trav.t.clone().add(o), p: trav.p.clone().add(o)};
-    };
-    // the port and the ejected shell's whole envelope (apex 12 cm up, landing and roll on the floor),
-    // framed into the free band between the header and the dock
-    const env = new THREE.Mesh(new THREE.BoxGeometry(18, 45, 38));
-    env.position.set(-11, -10, 18.5);
-    gun.add(env);
-    const port = frame(env, new THREE.Vector3(0.3, 0.5, 1), 1.0, false);
-    env.removeFromParent();
-    env.geometry.dispose();
+    const keys = TICKS.map((tk, i) => {
+      const t = Math.min(1, tk.t + 0.175 * ((TICKS[i + 1]?.t ?? 1) - tk.t) + 1e-4); // the middle of the hold
+      poseAll(0, channelsAt(t, true));
+      shells.pose(t, true, true);
+      fx.pose(t, true);
+      recoil(recoilAt(t));
+      return frame(subjectPts(clockSubject(i)), HERO_DIR);
+    });
     gun.position.copy(gp);
     gun.rotation.z = gr;
     poseAll(st.explode, channelsAt(st.t, st.fired));
     shells.pose(st.t, st.fired, st.t > 0 && st.explode < 0.02);
-    return {whole, close, track, port};
+    fx.pose(st.t, st.explode < 0.02);
+    return keys;
   }
   function clockCam(t, fresh = false) {
     if (fresh || !ckeys) ckeys = clockKeys();
-    const K = ckeys;
-    if (t < 0.125) return blend(K.whole, K.close, smr(0, 0.03, t));
-    if (t < 0.204) return blend(K.close, K.track(t), smr(0.125, 0.15, t)); // out to the whole gun before Travel
-    if (t < 0.3) return blend(K.track(Math.min(t, 0.21)), K.whole, smr(0.204, 0.213, t)); // pulls wide through the flash
-    return blend(K.whole, K.port, smr(0.3, 0.4, t));
+    const i = tickAt(t);
+    const t0 = TICKS[i].t;
+    const t1 = i + 1 < TICKS.length ? TICKS[i + 1].t : 1;
+    if (i + 1 >= TICKS.length || t1 <= t0) return ckeys[i];
+    return blend(ckeys[i], ckeys[i + 1], ease(clamp01(((t - t0) / (t1 - t0) - 0.35) / 0.65)));
   }
   const direct = () => !dir && (dir = {from: null, t0: 0});
   /** x-ray per phase: trigger group and receiver Press-Strike, barrel Burn-Travel, receiver in the pump. */
@@ -493,7 +500,7 @@ async function main() {
     pinned = false;
     setHover(null);
     focusOn(-1);
-    fly = null;
+    view.follow = null;
     tour.start(performance.now());
     tourBtn.classList.add('on');
   }
@@ -569,7 +576,6 @@ async function main() {
       drag = {id: e.pointerId, x: e.clientX, y: e.clientY};
       cyc.playing = false;
       cyc.tw = null;
-      fly = null;
       lastInput = performance.now();
     },
     true,
@@ -657,7 +663,7 @@ async function main() {
   let lastTick = -1;
   const asmLabel = Object.fromEntries(asms.map((a, i) => [a.key, `${String(i + 1).padStart(2, '0')} · ${a.label}`]));
   function pick(force = false) {
-    if (!pointer || (fly && !force)) return null;
+    if (!pointer || (view.follow && !force)) return null;
     ray.setFromCamera(ndc, camera);
     const hits = ray.intersectObjects(meshes, false);
     for (const h of hits) {
@@ -772,12 +778,9 @@ async function main() {
   const onResize = () => {
     S.resize();
     ckeys = null;
-    fitS = 1;
-    fitW = null;
-    if (!window.__READY || tour.active) return;
-    if (focus >= 0) return flyTo(frame(asms[focus].group, new THREE.Vector3(0.42, 0.34, 1), 1.15), 0.3);
-    fly = null;
-    const c = frame(gun, camera.position.clone().sub(controls.target), 1, false);
+    autoKey = '';
+    if (!window.__READY || tour.active || !view.user) return; // the auto camera refits on its next frame
+    const c = frame(autoSubject(), camera.position.clone().sub(controls.target), 1, false);
     camera.position.copy(c.p);
     controls.target.copy(c.t);
   };
@@ -799,7 +802,10 @@ async function main() {
   // frames where only the idle auto-turn moves the camera are drawn at 30 fps
   let lastSig = null;
   let lastCam = null;
-  let turning = false;
+  let swaying = false;
+  let autoKey = '';
+  let autoCam = null;
+  let lastExF = NaN;
   // adaptive quality judges render work, not frame spacing: the cost of each drawn frame is its GPU time
   // (one TIME_ELAPSED query round S.render(), read back a few frames later; ?perf=1 sums its own pass queries
   // instead) or, where that is missing, the CPU time of the call; the larger of the two. Frames skipped by
@@ -839,7 +845,7 @@ async function main() {
   const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {
     const raw = now - prev;
-    if (turning && controls.autoRotate && raw < 30 && !still) return requestAnimationFrame(tick);
+    if (swaying && raw < 30 && !still) return requestAnimationFrame(tick);
     const dt = Math.min(0.05, raw / 1000);
     prev = now;
     if (tour.active) {
@@ -908,11 +914,7 @@ async function main() {
     shells.pose(st.t, st.fired, st.t > 0 && st.explode < 0.02);
     fx.pose(st.t, st.explode < 0.02);
     // recoil: the gun kicks back and its muzzle rises about a pivot at the shoulder, then settles
-    const rk = st.explode < 0.02 ? recoilAt(st.t) : 0;
-    const th = RECOIL.rise * rk;
-    const pv = RECOIL.pivot;
-    gun.rotation.z = th;
-    gun.position.set(-12 - RECOIL.kick * rk + pv.x - (pv.x * Math.cos(th) - pv.y * Math.sin(th)), pv.y - (pv.x * Math.sin(th) + pv.y * Math.cos(th)), 0);
+    recoil(st.explode < 0.02 ? recoilAt(st.t) : 0);
 
     // dimming
     // dimming keeps each part's material (30% brightness, half opacity); the selection is lifted 15%
@@ -927,31 +929,49 @@ async function main() {
     S.cool.intensity = 0.25 * S.key.intensity; // the cool fill keeps 25% of the key
     S.renderer.toneMappingExposure = 1.08 - 0.65 * rim[3];
 
-    // camera flight
-    if (fly && !tour.active) {
-      const t = ease(clamp01((now - fly.t0) / fly.dur));
-      controls.target.lerpVectors(fly.ft, fly.tt, t);
-      camera.position.lerpVectors(fly.fp, fly.tp, t);
-      if (t >= 1) fly = null;
-    }
-    // the clock camera: eases in from wherever the camera was, then is a pure function of t
-    if (dir && !tour.active && st.explode < 0.05) {
+    // camera: the tour's, the clock's, the visitor's (orbiting), or the framing rule (auto)
+    const idle = !still && !tour.active && !cyc.playing && !cyc.tw && !drag && now - lastInput > 5000;
+    if (tour.active) camera.lookAt(controls.target);
+    else if (dir && st.explode < 0.05) {
+      // the clock camera: eases in from wherever the camera was, then is a pure function of t
       if (!dir.from) dir = {from: {t: controls.target.clone(), p: camera.position.clone()}, t0: now};
       const k = clockCam(st.t);
       const w = ease(clamp01((now - dir.t0) / 800));
       const cm = w < 1 ? blend(dir.from, k, w) : k;
       controls.target.copy(cm.t);
       camera.position.copy(cm.p);
-      fly = null;
+      camera.lookAt(cm.t);
       lastInput = now;
+    } else {
+      if (dir) dir.from = null; // exploded mid-cycle: the clock camera eases in again on reassembly
+      const exMoving = Math.abs(st.explode - lastExF) > 1e-6;
+      lastExF = st.explode;
+      if (view.user && idle) flyTo(1.6); // back to the hero view, then the sway
+      if (view.user && exMoving) {
+        // the explode slider after an orbit: reframe every part continuously along the visitor's direction
+        view.user = false;
+        view.base = camera.position.clone().sub(controls.target).normalize();
+        followFrom(0.5);
+      }
+      if (view.user) controls.update(dt);
+      else {
+        aim(view.env, idle && !view.base ? 1 : 0, now);
+        stepT(view.env, now);
+        view.phase = view.env.v > 0 ? view.phase + (dt * 2 * Math.PI) / SWAY_P : 0;
+        const key = [st.explode, focus, view.phase, view.env.v, S.size.w, S.size.h, view.base ? view.base.toArray() : 0, st.t].join();
+        if (key !== autoKey || !autoCam) autoCam = frame(autoSubject(), autoDir(), 1, !view.base);
+        autoKey = key;
+        let cm = autoCam;
+        if (view.follow) {
+          const w = ease(clamp01((now - view.follow.t0) / view.follow.dur));
+          cm = blend(view.follow.from, autoCam, w);
+          if (w >= 1) view.follow = null;
+        }
+        controls.target.copy(cm.t);
+        camera.position.copy(cm.p);
+        camera.lookAt(cm.t);
+      }
     }
-    controls.autoRotate = !still && !tour.active && !fly && !dir && now - lastInput > 5000;
-    if (!tour.active && !dir) {
-      if (fly) fitS = 1;
-      else unfit();
-      controls.update(dt);
-      if (!fly) fit(dt);
-    } else (fitS = 1), camera.lookAt(controls.target);
 
     // hover outline + name card
     if (!pinned && !drag) {
@@ -981,7 +1001,7 @@ async function main() {
     const moved = !same(lastSig, sg, 1e-6);
     const camMoved = !same(lastCam, cm, 1e-5);
     const draw = moved || camMoved || still || S.renderer.shadowMap.needsUpdate;
-    turning = !moved && camMoved && controls.autoRotate;
+    swaying = !moved && camMoved && view.env.v > 0 && !view.follow && !view.user; // only the sway moves: 30 fps
     pickDirty = draw;
     if (!draw) return requestAnimationFrame(tick);
     lastSig = sg;
@@ -1037,7 +1057,7 @@ async function main() {
   MARKS.shaders = performance.now();
   load.remove();
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame, clockCam, partByName, TICKS, tickAt, get hovered() { return hovered; }}; // controls + frame: for the hero and check shots
+  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame, clockCam, partByName, TICKS, tickAt, subjectPts, usable, clockSubject, autoSubject, view, direct, get hovered() { return hovered; }}; // controls + frame: for the hero and check shots
 }
 
 main().catch((e) => {
