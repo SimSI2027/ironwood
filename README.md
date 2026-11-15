@@ -1,21 +1,21 @@
 # Ironwood Mk I
 
-![Ironwood Mk I mid-cycle: the spent shell leaving the ejection port](docs/hero.png)
+![Ironwood Mk I mid-pump: the spent shell in the air after the shot, receiver in x-ray](docs/hero.png)
 
 An interactive 3D exploded view of a walnut-stocked pump-action shotgun, built entirely in code with three.js. No models or textures are loaded: every part, material and shader is procedural, and the built page is one self-contained HTML file.
 
 **Live:** https://simsi2027.github.io/ironwood/
 
-The pump cycle is a hand-keyed animation of one parameter: the forend, action bars and bolt run back 7.5 cm, the spent shell leaves through the side port, a fresh shell backs out of the magazine tube and rises on the elevator, and the forend pushes forward to chamber it.
+Firing and pumping are one hand-keyed clock t in two segments. FIRE (0-0.30): the trigger rotates back, the hammer falls on the firing pin, the primer sparks, the hull glows, the wad and shot column run the bore, the muzzle flashes (with a 0.1 s light, a 60-pellet shot cloud and a smoke puff) and the gun recoils 1.5 cm with a 2 degree muzzle rise. PUMP (0.30-1): the forend, action bars and bolt run back 7.5 cm, re-cocking the hammer; the shell pivots out of the port on its sill, flies a 30 x 12 cm arc, bounces, rolls and fades (spent only if FIRE ran, clean otherwise); a fresh shell rises on the elevator and is chambered; the trigger resets as the bolt locks. X-ray and the camera follow the phase.
 
 ## Controls
 
 - **Drag** to orbit, **scroll** or pinch to zoom.
 - **Explode** slider takes the rifle apart and puts it back together.
 - **Hover** a part (or **tap** on touch) to see its name and assembly. A tap pins the card, and a tap on empty space clears it.
-- **Cycle** panel: scrub the timeline or press play (the ticks name each stage: Closed, Unlock, Eject, Lift, Feed, Locked), step with the arrow buttons, and pick 1x, 0.25x or 0.1x speed. On a phone the panel is one row; the chevron opens the steps, ticks and speeds.
-- **Drag the forend** along the barrel to pump it by hand (orbit pauses while you hold it).
-- **Tour** plays a guided camera sequence. Any input hands control back to you.
+- **Cycle** panel: **Fire** plays 0-0.30 at 0.1x, **Pump** plays 0.30-1, **Full** plays both. One scrubber split into the FIRE and PUMP segments (the active one widens and shows its tick labels); play/pause, step one frame (1/240 s) with the arrow buttons, speeds 1x, 0.25x, 0.1x, 0.05x; the readout shows seconds and the frame number. The camera follows the phase until you orbit. On a phone the panel is one row (Fire, Pump, Full, scrubber, readout); the chevron opens play, steps, ticks and speeds.
+- **Drag the forend** along the barrel to scrub the PUMP segment by hand (orbit pauses while you hold it).
+- **Tour** plays a 24 s guided sequence (the FULL clock at 0.25x, then each assembly, explode, reassemble). Any input hands control back to you.
 
 ## Credits
 
