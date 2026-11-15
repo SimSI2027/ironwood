@@ -91,15 +91,16 @@ export function createStage(canvas) {
   under.position.set(30, -60, 90);
   scene.add(under);
 
-  // dark reflective floor (both tiers; 512 px reflection on low): slightly blurred planar
-  // reflection, a dark contact band and a soft warm pool of light under the gun, fading to
-  // transparent into the CSS background. Linear values, tone mapped like the rest.
+  // dark reflective floor (both tiers; 512 px reflection on low): a blurred planar reflection at
+  // 12% that fades out within 40 cm of the gun's footprint (x -44..71, z 0), one soft elliptical
+  // contact shadow centred under the gun, and a soft warm pool of light, fading to transparent
+  // into the CSS background. Linear values, tone mapped like the rest.
   const floorGeo = new THREE.CircleGeometry(700, 96);
   const floorU = {
     uBase: {value: new THREE.Color(0.011, 0.012, 0.014)},
     uPool: {value: new THREE.Color(0.03, 0.025, 0.019)},
-    uC: {value: new THREE.Vector2(2, 0)},
-    uStrength: {value: 0.32},
+    uC: {value: new THREE.Vector2(13.5, 0)}, // the gun's centre over the floor
+    uStrength: {value: 0.12},
     uR: {value: new THREE.Vector2(110, 420)},
   };
   const floorR = new Reflector(floorGeo, {
@@ -114,15 +115,24 @@ export function createStage(canvas) {
         fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 uBase; uniform vec3 uPool; uniform vec2 uC; uniform float uStrength; uniform vec2 uR;
           varying vec4 vRefl; varying vec3 vW;
           void main(){
-            vec2 uv = vRefl.xy / vRefl.w; vec2 px = 1.5 / vec2(textureSize(tDiffuse, 0));
-            vec3 r = (texture2D(tDiffuse, uv).rgb * 2.0 + texture2D(tDiffuse, uv + px).rgb + texture2D(tDiffuse, uv - px).rgb
-              + texture2D(tDiffuse, uv + vec2(px.x, -px.y)).rgb + texture2D(tDiffuse, uv + vec2(-px.x, px.y)).rgb) / 6.0;
+            vec2 uv = vRefl.xy / vRefl.w; vec2 px = 1.0 / vec2(textureSize(tDiffuse, 0));
+            // blur: centre plus two rings of 6 taps (3 and 6 px)
+            vec3 r = texture2D(tDiffuse, uv).rgb;
+            for (int k = 0; k < 6; k++) {
+              float a = float(k) * 1.0472;
+              vec2 o = vec2(cos(a), sin(a)) * px;
+              r += texture2D(tDiffuse, uv + o * 3.0).rgb + texture2D(tDiffuse, uv + vec2(-o.y, o.x) * 6.0).rgb;
+            }
+            r /= 13.0;
+            // the reflection fades out within 40 cm of the gun's footprint
+            float gd = length(vec2(max(max(-44.0 - vW.x, vW.x - 71.0), 0.0), vW.z));
+            r *= (1.0 - smoothstep(0.0, 40.0, gd)) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0); // no clamped-edge smear
             vec2 d = vW.xz - uC;
             float fade = 1.0 - smoothstep(uR.x, uR.y, length(d * vec2(0.75, 1.0)));
             vec2 pq = d / vec2(88.0, 36.0);
             float pool = exp(-dot(pq, pq) * 1.6);
-            float contact = 1.0 - smoothstep(0.1, 1.0, length(d / vec2(66.0, 8.0)));
-            vec3 col = (uBase + uPool * pool) * (1.0 - 0.6 * contact) + r * uStrength * (0.4 + 0.6 * pool);
+            float contact = 1.0 - smoothstep(0.0, 1.0, length(d / vec2(64.0, 10.0)));
+            vec3 col = (uBase + uPool * pool) * (1.0 - 0.65 * contact) + r * uStrength;
             gl_FragColor = vec4(col, fade);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
@@ -139,7 +149,8 @@ export function createStage(canvas) {
   catcher.position.y = FLOOR_Y + 0.05;
   catcher.receiveShadow = true;
   catcher.renderOrder = -1;
-  scene.add(catcher);
+  // not added: the floor shader draws the one contact shadow (the key light's cast shadow sat
+  // off to one side as a second one)
 
   const target = new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType, samples: 4});
   const composer = new EffectComposer(renderer, target);
