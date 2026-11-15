@@ -1,10 +1,11 @@
-# STATUS — 2026-11-15, session 4 (fixes 1-7, pump cycle 8-12, shipped)
-- Done 1-7: pill fill (a cascade tie hid it), GPU-string / 12 ms probe + remembered HIGH/LOW toggle, 8% point-fit camera refit on resize, one-row pills (strip <700 px), dim keeps material at 30%/0.5 + brass rim, CSS gradient + reflective floor with contact band and light pool, screws, pin ends, knurl, checkering normal map, 0.4 mm bevels, bolt machining lines.
-- Done 8-11: src/cycle.js keys every channel off c (forend, bolt, locking block, elevator, dented spent shell, crimped fresh shell); forend drag with orbit off; CYCLE panel; x-ray receiver + tick name card; tour cycle at 0.25x, so the tour is now 22.2 s.
-- Done 12 + ship: job file edited but still untracked, as last session left it. Pages https://simsi2027.github.io/ironwood/ returned 200 with this build.
-- Screenshots: cutaway-out/s4-{assembled,pill,eject}.png. Fixed after them, checked by pixel readback only: dimmed brass bloomed, Closed/Unlock labels overlapped, ejected shell popped out of the receiver top.
-- Decisions: the probe times render + 1 px readback, not the rAF interval (a 60 Hz screen never averages <12 ms); default speed 0.25x; Play stops at Locked and snaps to Closed; using the cycle assembles the gun.
-- Skipped: nothing failed twice. Left as is: the job file still says the tour is 20 s with "pump twice" (you asked for two edits only).
-- Look first 1) receiver close-up (pill 04) on your 4090: headless drew ~1 frame/s, so shot 2 caught the dim fade mid-way; also the receiver's top edge saturates white.
-- 2) the cycle at 0.25x and by dragging the forend: parts pass through each other (shell vs mag tube and barrel extension; the bolt runs 10 cm on a 7.5 cm slide). Judge whether the choreography reads.
-- 3) phone: the low tier now draws the floor reflection too (scene rendered twice), and the dock is 219 px tall at 390x844. Check fps and that the gun isn't squeezed.
+# STATUS — 2026-11-15, session 5 (cycle clipping, receiver white, phone dock, README)
+- 1 Cycle: BOLT_TRAVEL = PUMP = 7.5 cm. Fresh shell: tube (0.8) -> out at x -7.0 (tip 4 mm behind the tube mouth, base 5 mm ahead of the bolt) -> up to bore level -> bolt pushes it in. Spent shell: slides straight out the port (no yaw), tumbles only outside the wall.
+- 1 needed two geometry edits to be possible at 7.5 cm: PORT now runs to x -0.4 (was -3.0), and the barrel extension is a hood (open below and on the port side, inner radius 1.12) so shells can pass; extractor notch moved to the left. Ticks: Eject 0.44, Lift 0.52 (their labels overlap on the track).
+- 2 Receiver: the white was anisotropy on the swept crown, not light or wear. Crown and its screws now anisotropy 0 / roughness 0.45-0.6; pill-04 also lowers key and exposure. Receiver region: max luminance 0.99, 7 single pixels over 92% left (tiny trigger-group pins).
+- 3 Phones <700 px: low tier hides the floor reflection, keeps the contact shadow. Dock is 128 px at 390x844, CYCLE is play + scrubber + seconds + chevron; step, ticks and speeds open under the chevron (217 px open).
+- 4 README: hero (docs/hero.png = s4-eject.png, shot before item 1), cycle line, cycle controls. IRONWOOD_JOB.md tour line now 22 s with the cycle at 0.25x (file still untracked).
+- Screenshot: cutaway-out/s5-feed.png (gitignored) (800 px, cycle paused at Feed). Checked by pixel readback only: phone render, shell clearances (computed, not rendered frame by frame).
+- Pages https://simsi2027.github.io/ironwood/ checked after push, see the last commit message.
+- Look first 1) scrub the cycle 0.38-0.6 on your 4090: spent shell should leave the port flat, fresh shell rises in the open throat of the extension.
+- 2) the hero image predates the port/hood change, so it shows the old ejection; re-shoot it.
+- 3) Eject/Lift tick labels collide on the scrubber.
