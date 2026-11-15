@@ -11,13 +11,12 @@ import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {Reflector} from 'three/addons/objects/Reflector.js';
 
-// ACES crushes the toe: #15161a would land at ~#060609 on screen. This pre-tonemap value lands
-// near the CSS charcoal (#15161a-#1b1c21) once tone mapped.
-export const BG = 0x272a30;
+// The background is a CSS gradient (#15171c -> #07080a) behind a transparent canvas, so its
+// colours are exact on both tiers; the floor fades to transparent into it.
 export const FLOOR_Y = -32;
 
 const Vignette = {
-  uniforms: {tDiffuse: {value: null}, uAmount: {value: 0.42}, uAspect: {value: 1}},
+  uniforms: {tDiffuse: {value: null}, uAmount: {value: 0}, uAspect: {value: 1}},
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
     uniform sampler2D tDiffuse; uniform float uAmount; uniform float uAspect; varying vec2 vUv;
@@ -52,7 +51,8 @@ const BRASS_HIGHPASS = `
 
 export function createStage(canvas) {
   // antialias on: the low tier draws straight to the canvas with no composer
-  const renderer = new THREE.WebGLRenderer({canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false});
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true, powerPreference: 'high-performance', preserveDrawingBuffer: false});
+  renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -63,8 +63,6 @@ export function createStage(canvas) {
   renderer.shadowMap.needsUpdate = true;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(BG);
-  scene.fog = new THREE.Fog(BG, 320, 900);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.95;
@@ -94,10 +92,17 @@ export function createStage(canvas) {
   under.position.set(30, -60, 90);
   scene.add(under);
 
-  // dark floor that melts into the background: a faint, slightly blurred planar reflection
-  // (high tier only), plus a separate catcher for the soft contact shadow
+  // dark reflective floor (both tiers; 512 px reflection on low): slightly blurred planar
+  // reflection, a dark contact band and a soft warm pool of light under the gun, fading to
+  // transparent into the CSS background. Linear values, tone mapped like the rest.
   const floorGeo = new THREE.CircleGeometry(700, 96);
-  const floorU = {uBg: {value: new THREE.Color(BG)}, uBase: {value: new THREE.Color(0x30333a)}, uStrength: {value: 0.07}, uR: {value: new THREE.Vector2(60, 560)}};
+  const floorU = {
+    uBase: {value: new THREE.Color(0.011, 0.012, 0.014)},
+    uPool: {value: new THREE.Color(0.03, 0.025, 0.019)},
+    uC: {value: new THREE.Vector2(2, 0)},
+    uStrength: {value: 0.32},
+    uR: {value: new THREE.Vector2(110, 420)},
+  };
   const floorR = new Reflector(floorGeo, {
       textureWidth: 1024,
       textureHeight: 1024,
@@ -107,33 +112,34 @@ export function createStage(canvas) {
         uniforms: {color: {value: null}, tDiffuse: {value: null}, textureMatrix: {value: null}, ...floorU},
         vertexShader: `uniform mat4 textureMatrix; varying vec4 vRefl; varying vec3 vW;
           void main(){ vRefl = textureMatrix * vec4(position, 1.0); vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-        fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 uBg; uniform vec3 uBase; uniform float uStrength; uniform vec2 uR; varying vec4 vRefl; varying vec3 vW;
+        fragmentShader: `uniform sampler2D tDiffuse; uniform vec3 uBase; uniform vec3 uPool; uniform vec2 uC; uniform float uStrength; uniform vec2 uR;
+          varying vec4 vRefl; varying vec3 vW;
           void main(){
             vec2 uv = vRefl.xy / vRefl.w; vec2 px = 1.5 / vec2(textureSize(tDiffuse, 0));
             vec3 r = (texture2D(tDiffuse, uv).rgb * 2.0 + texture2D(tDiffuse, uv + px).rgb + texture2D(tDiffuse, uv - px).rgb
               + texture2D(tDiffuse, uv + vec2(px.x, -px.y)).rgb + texture2D(tDiffuse, uv + vec2(-px.x, px.y)).rgb) / 6.0;
-            float fade = 1.0 - smoothstep(uR.x, uR.y, length(vW.xz));
-            gl_FragColor = vec4(mix(uBg, uBase + r * uStrength * fade, fade), 1.0);
+            vec2 d = vW.xz - uC;
+            float fade = 1.0 - smoothstep(uR.x, uR.y, length(d * vec2(0.75, 1.0)));
+            vec2 pq = d / vec2(88.0, 36.0);
+            float pool = exp(-dot(pq, pq) * 1.6);
+            float contact = 1.0 - smoothstep(0.1, 1.0, length(d / vec2(66.0, 8.0)));
+            vec3 col = (uBase + uPool * pool) * (1.0 - 0.6 * contact) + r * uStrength * (0.4 + 0.6 * pool);
+            gl_FragColor = vec4(col, fade);
+            #include <tonemapping_fragment>
+            #include <colorspace_fragment>
           }`,
       },
     });
-  const floorP = new THREE.Mesh(
-      floorGeo,
-      new THREE.ShaderMaterial({
-        uniforms: floorU,
-        vertexShader: 'varying vec3 vW; void main(){ vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        fragmentShader: 'uniform vec3 uBg; uniform vec3 uBase; uniform vec2 uR; varying vec3 vW; void main(){ gl_FragColor = vec4(mix(uBg, uBase, 1.0 - smoothstep(uR.x, uR.y, length(vW.xz))), 1.0); }',
-      }),
-    );
-  for (const f of [floorR, floorP]) {
-    f.rotation.x = -Math.PI / 2;
-    f.position.y = FLOOR_Y;
-    scene.add(f);
-  }
+  floorR.material.transparent = true;
+  floorR.renderOrder = -2;
+  floorR.rotation.x = -Math.PI / 2;
+  floorR.position.y = FLOOR_Y;
+  scene.add(floorR);
   const catcher = new THREE.Mesh(new THREE.CircleGeometry(260, 64), new THREE.ShadowMaterial({color: 0x050506, opacity: 0.55, depthWrite: false}));
   catcher.rotation.x = -Math.PI / 2;
   catcher.position.y = FLOOR_Y + 0.05;
   catcher.receiveShadow = true;
+  catcher.renderOrder = -1;
   scene.add(catcher);
 
   const target = new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType, samples: 4});
@@ -147,7 +153,7 @@ export function createStage(canvas) {
   ao.blendIntensity = 0.8;
   const aoRender = ao.render.bind(ao);
   ao.render = (...args) => {
-    floorR.visible = floorP.visible = catcher.visible = false;
+    floorR.visible = catcher.visible = false;
     aoRender(...args);
     showFloors();
   };
@@ -189,9 +195,9 @@ export function createStage(canvas) {
     v.copy(p).project(camera);
     return {x: (v.x * 0.5 + 0.5) * size.w, y: (-v.y * 0.5 + 0.5) * size.h, visible: v.z < 1};
   };
-  // --- low tier: no post. Vignette becomes a CSS overlay, the hover outline an inverted hull.
+  // --- low tier: no post; the hover outline is an inverted hull.
   const vigEl = document.createElement('div');
-  vigEl.className = 'iw-vig';
+  vigEl.className = 'iw-vig on'; // one CSS vignette for both tiers (the canvas is transparent)
   canvas.after(vigEl);
   const hullMat = new THREE.ShaderMaterial({
     uniforms: {uK: {value: 0.002}, uC: {value: new THREE.Color(0xe2b65c)}},
@@ -218,9 +224,7 @@ export function createStage(canvas) {
     }
   };
   function showFloors() {
-    floorR.visible = S.tier === 'high';
-    floorP.visible = !floorR.visible;
-    catcher.visible = true;
+    floorR.visible = catcher.visible = true;
   }
   /** high: 4096 shadow, GTAO, brass bloom, outline pass, DPR <= 2. low: 1024 shadow, no post, DPR <= 1.5. */
   const setTier = (t) => {
@@ -234,7 +238,7 @@ export function createStage(canvas) {
     key.shadow.map = key.shadow.mapPass = null;
     renderer.shadowMap.needsUpdate = true;
     showFloors();
-    vigEl.classList.toggle('on', !hi);
+    floorR.getRenderTarget().setSize(hi ? 1024 : 512, hi ? 1024 : 512);
     resize();
     select(sel);
   };

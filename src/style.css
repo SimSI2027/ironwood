@@ -10,7 +10,7 @@
   --iw-font: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
 }
 html, body { background: var(--iw-bg); }
-#app { position: fixed; inset: 0; overflow: hidden; background: var(--iw-bg); }
+#app { position: fixed; inset: 0; overflow: hidden; background: linear-gradient(180deg, #15171c 0%, #07080a 100%); }
 #gl { touch-action: none; cursor: grab; }
 #gl:active { cursor: grabbing; }
 
@@ -103,7 +103,7 @@ html, body { background: var(--iw-bg); }
   .iw-btn.on:hover { border-color: #c9a24b; }
 }
 .iw-tour.on { background: linear-gradient(90deg, var(--iw-brass) var(--t, 0%), rgba(210, 169, 87, 0.55) var(--t, 0%)); }
-/* low tier has no post: the vignette is drawn here instead */
+/* the vignette, for both tiers: the canvas is transparent over the #app gradient */
 .iw-vig { position: absolute; inset: 0; pointer-events: none; display: none;
-  background: radial-gradient(ellipse 75% 75% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.4) 100%); }
+  background: radial-gradient(ellipse 75% 75% at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.35) 100%); }
 .iw-vig.on { display: block; }
