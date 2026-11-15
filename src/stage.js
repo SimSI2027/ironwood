@@ -189,6 +189,7 @@ export function createStage(canvas) {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     vig.uniforms.uAspect.value = w / h;
+    if (S.tier) showFloors();
   };
   const v = new THREE.Vector3();
   const project = (p) => {
@@ -224,7 +225,9 @@ export function createStage(canvas) {
     }
   };
   function showFloors() {
-    floorR.visible = catcher.visible = true;
+    // phones (< 700 px) on the low tier keep the contact shadow but skip the reflection (a second scene pass)
+    floorR.visible = !(S.tier === 'low' && innerWidth < 700);
+    catcher.visible = true;
   }
   /** high: 4096 shadow, GTAO, brass bloom, outline pass, DPR <= 2. low: 1024 shadow, no post, DPR <= 1.5. */
   const setTier = (t) => {

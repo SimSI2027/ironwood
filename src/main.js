@@ -119,9 +119,12 @@ async function main() {
       `<div class="iw-tl"><input class="iw-range" type="range" min="0" max="1" step="0.001" value="0" aria-label="Cycle position"><div class="iw-ticks">` +
       TICKS.map((t) => `<span style="--x:${t.c}"><i></i><b>${t.name}</b></span>`).join('') +
       `</div></div><div class="iw-spd"><button data-s="1">1x</button><button data-s="0.25" class="on">0.25x</button><button data-s="0.1">0.1x</button></div>` +
-      `<output class="iw-sec">0.00 s</output>`,
+      `<output class="iw-sec">0.00 s</output>` +
+      `<button class="iw-ib iw-more" aria-label="More cycle controls" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M3 6l5 5 5-5"/></svg></button>`,
     dock,
   );
+  const cMore = cycEl.querySelector('.iw-more');
+  cMore.onclick = () => cMore.setAttribute('aria-expanded', String(cycEl.classList.toggle('open')));
   const cRange = cycEl.querySelector('.iw-range');
   const cOut = cycEl.querySelector('.iw-sec');
   const cPlay = cycEl.querySelector('.iw-play');
