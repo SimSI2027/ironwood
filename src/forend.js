@@ -21,7 +21,7 @@ function ribbedShell(L, Ri, Ro, open, ribs) {
   s.absarc(0, 0, Ro, a0, a1, false);
   s.absarc(0, 0, Ri, a1, a0, true);
   s.closePath();
-  let g = extrudeYZ(s, L, 0.16, 10, 120, true); // 20 points per arc (17 deg), a ring every 1.9 mm: the ribs need them: the ribs span 11 mm
+  let g = extrudeYZ(s, L, 0.16, 16, 120, true); // 32 points per arc (11 deg), a ring every 1.9 mm: the ribs need them: the ribs span 11 mm
   const p = g.attributes.position;
   const mid = (Ri + Ro) / 2;
   const R = (x) => {

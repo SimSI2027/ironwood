@@ -1,6 +1,20 @@
 // One assembly = one group of named parts. Each part knows where it rests and how it fans out.
 import * as THREE from 'three';
 import {makeMaterials, NO_BLOOM} from './materials.js';
+import {toCreasedNormals, mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
+
+// smooth vertex normals on every curved surface, hard edges kept: faces meeting under 35 deg share normals
+const CREASE = THREE.MathUtils.degToRad(35);
+const creased = new WeakMap(); // shared geometries are processed once
+const TEX = ['map', 'bumpMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'clearcoatNormalMap', 'anisotropyMap'];
+function crease(g) {
+  if (!creased.has(g)) {
+    let c = toCreasedNormals(g, CREASE);
+    if (!c.groups.length && !c.morphAttributes.position) c = mergeVertices(c, 1e-5); // indexed again
+    creased.set(g, c);
+  }
+  return creased.get(g);
+}
 
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * t * (t * (t * 6 - 15) + 10));
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
@@ -132,6 +146,15 @@ export class Asm {
    * material gets the dim/rim hook.
    */
   finalize() {
+    // creased normals before the x-ray edge lines are built from the geometry; textures: mipmaps, anisotropic 8
+    this.group.traverse((o) => {
+      if (!o.isMesh || o.isLineSegments || Array.isArray(o.material)) return;
+      o.geometry = crease(o.geometry);
+      for (const k of TEX) {
+        const t = o.material[k];
+        if (t && t.anisotropy !== 8) Object.assign(t, {anisotropy: 8, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, needsUpdate: true});
+      }
+    });
     this.edgeMat = new THREE.LineBasicMaterial({color: 0xf0c060, transparent: true, opacity: 0, depthWrite: false});
     for (const part of this.parts) {
       if (!part.xray) continue;

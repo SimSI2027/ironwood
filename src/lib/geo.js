@@ -30,7 +30,7 @@ export function rbox(w, h, d, r = 0.06, seg = 1) {
 /** Lathe around +X. pts = [[x, r], ...] in order (closed loops: outer forward, inner back). */
 export function latheX(pts, seg = 32, phiStart = 0, phiLength = Math.PI * 2) {
   const rmax = Math.max(...pts.map((p) => p[1]));
-  const g = new THREE.LatheGeometry(pts.map(([x, r]) => new V2(Math.max(r, 1e-4), x)), Math.min(seg, 32, rmax < 0.15 ? 10 : rmax < 0.4 ? 14 : rmax < 1 ? 24 : 32), phiStart, phiLength); // 32 radial on the tubes, fewer on the thin pins and screws
+  const g = new THREE.LatheGeometry(pts.map(([x, r]) => new V2(Math.max(r, 1e-4), x)), Math.min(Math.max(seg, 48), rmax < 0.15 ? 12 : rmax < 0.4 ? 16 : rmax < 1 ? 32 : 48), phiStart, phiLength); // 48 radial on the tubes (no polygonal silhouette at a pill close-up), fewer on the thin pins and screws
   g.rotateZ(-Math.PI / 2);
   return g;
 }
