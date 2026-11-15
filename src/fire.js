@@ -85,13 +85,15 @@ export function createFireFX() {
   // fall off smoothly, so they merge into one elongated bloom; the light lasts 0.1 s
   const flash = add(new THREE.Group());
   flash.position.x = MUZZLE + 0.2;
-  const FL = [[2.5, 0, 0, 9.0, 0.16, 0xff9a48], [0.3, 0, 0, 3.6, 0.85, 0xfff0d0]];
-  for (let k = 0; k < 9; k++) {
-    const u = k / 8;
-    FL.push([0.6 + u * 11.5, 0, 0, 4.2 - 1.9 * u, 0.42 * (1 - u) ** 1.4 + 0.05, u < 0.4 ? 0xffc070 : 0xff9040]);
+  const FL = [[2.5, 0, 0, 9.0, 0.16, 0xff9a48, hot], [0.3, 0, 0, 3.6, 0.85, 0xfff0d0, hot]];
+  // the tail: 18 wide, soft (no hot centre) glows 0.7 cm apart, so they read as one bloom, not beads
+  const soft = glowTex([[0, 'rgba(255,205,140,0.8)'], [0.45, 'rgba(255,140,60,0.35)'], [1, 'rgba(255,90,20,0)']]);
+  for (let k = 0; k < 18; k++) {
+    const u = k / 17;
+    FL.push([0.6 + u * 12, 0, 0, 5.2 - 2.4 * u, 0.24 * (1 - u) ** 1.3 + 0.02, u < 0.4 ? 0xffc070 : 0xff9040, soft]);
   }
-  for (const [x, y, z, sc, op, col] of FL) {
-    const sp = new THREE.Sprite(additive(hot, col));
+  for (const [x, y, z, sc, op, col, tex] of FL) {
+    const sp = new THREE.Sprite(additive(tex, col));
     sp.position.set(x, y, z);
     sp.userData = {sc, op};
     flash.add(sp);
@@ -153,7 +155,8 @@ export function createFireFX() {
         cloud.setMatrixAt(i, m4);
       });
       cloud.instanceMatrix.needsUpdate = true;
-      cloud.material.emissiveIntensity = 1.5 * (1 - uc);
+      cloud.material.emissiveIntensity = 1.5 * (1 - uc) ** 2;
+      cloud.scale.setScalar(1 - 0.7 * uc); // pellets shrink as they fly out: no hard specks at the frame edge
     }
     // smoke: born 0.212-0.225, gone by 0.30
     for (const s of puffs) {

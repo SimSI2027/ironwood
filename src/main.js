@@ -401,7 +401,7 @@ async function main() {
    * Camera {t, p} looking along dir with the subject's bounds filling the window (FILL of the usable
    * area, centred), at any aspect. fill > 1 backs off further. obj: anything subjectPts takes.
    */
-  function frame(obj, dir = HERO_DIR, fill = 1, adjust = true) {
+  function frame(obj, dir = HERO_DIR, fill = 1, adjust = true, keep = []) {
     const pts = subjectPts(obj);
     dir = dir.clone();
     if (adjust && camera.aspect < 0.8) dir.x += 0.6; // portrait: look further along the axis
@@ -432,6 +432,19 @@ async function main() {
       oy += ((y0 + y1) / 2 - (W.y0 + W.y1) / 2) * D * ty;
       D *= Math.max((x1 - x0) / (W.x1 - W.x0), (y1 - y0) / (W.y1 - W.y0));
     }
+    // keep: points that must be inside the window but take no part in centring (the floor's contact shadow)
+    if (keep.length) {
+      const ndcY = (p, q) => {
+        const z = Math.max(p.clone().sub(c).dot(f) + D, 1e-3);
+        return (p.clone().sub(c).dot(u) - q) / (z * ty);
+      };
+      let need = 0;
+      for (const p of keep) need = Math.min(need, ndcY(p, oy) - W.y0);
+      let room = Infinity;
+      for (const q of P) room = Math.min(room, W.y1 - (q[1] - oy) / (Math.max(q[2] + D, 1e-3) * ty));
+      const dy = Math.max(need, -room); // ndc the view moves down (everything up), at most the gun's headroom
+      oy += dy * D * ty;
+    }
     const t = c.clone().addScaledVector(r, ox).addScaledVector(u, oy);
     return {t, p: t.clone().addScaledVector(dir, D * fill)};
   }
@@ -447,7 +460,8 @@ async function main() {
   // the whole gun is framed with its ground: the dark core of the floor's contact shadow (under receiver and magazine), so
   // the contact shadow and the reflection beside it are always in the usable area under the gun
   const ground = () => [-12, 40].flatMap((x) => [-4, 4].map((z) => new THREE.Vector3(x, S.floor.position.y, z))); // the shadow's dark core
-  const autoSubject = () => (focus >= 0 ? asms[focus].group : [gun, ground()]);
+  const autoSubject = () => (focus >= 0 ? asms[focus].group : gun);
+  const autoKeep = () => (focus >= 0 ? [] : ground());
   const autoDir = () => swayDir(view.base || (focus >= 0 ? PILL_DIR : HERO_DIR), SWAY * view.env.v * Math.sin(view.phase));
   function followFrom(dur = 0.9) {
     view.follow = {from: {t: controls.target.clone(), p: camera.position.clone()}, t0: performance.now(), dur: dur * 1000};
@@ -845,16 +859,19 @@ async function main() {
     const placed = [];
     const order = asms.map((a, i) => i).sort((i, j) => anchor[i][0] - anchor[j][0]);
     const kids = lab.svg.children;
-    order.forEach((i, n) => {
+    let gy0 = Infinity, gy1 = -Infinity;
+    for (const b of boxes) (gy0 = Math.min(gy0, b.y0)), (gy1 = Math.max(gy1, b.y1));
+    const lastX = {t: -Infinity, b: -Infinity}; // right edge of the last label on each side
+    order.forEach((i) => {
       const e = lab.els[i];
       const w = e.offsetWidth;
       const h = e.offsetHeight;
       const [ax, ay] = anchor[i];
       let pick = null;
-      for (const side of n % 2 ? ['b', 't'] : ['t', 'b']) {
+      for (const side of ay - gy0 < gy1 - ay ? ['t', 'b'] : ['b', 't']) {
         for (let k = 0; k < 24 && !pick; k++) {
           const dx = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 16;
-          const x0 = Math.min(Math.max(ax - w / 2 + dx, U.l + 8), U.r - 8 - w);
+          const x0 = Math.min(Math.max(ax - w / 2 + dx, U.l + 8, lastX[side] + 10), U.r - 8 - w);
           // the column's parts: the label goes just past them, 18 px clear
           const col = boxes.filter((b) => b.x1 > x0 - 6 && b.x0 < x0 + w + 6);
           const y0 = side === 't' ? Math.min(ay, ...col.map((b) => b.y0)) - 18 - h : Math.max(ay, ...col.map((b) => b.y1)) + 18;
@@ -871,6 +888,7 @@ async function main() {
         pick = {r: {x0, x1: x0 + w, y0, y1: y0 + h}, side: 't'};
       }
       placed.push(pick.r);
+      lastX[pick.side] = Math.max(lastX[pick.side], pick.r.x1);
       e.style.transform = `translate(${pick.r.x0.toFixed(1)}px, ${pick.r.y0.toFixed(1)}px)`;
       const ex = Math.min(Math.max(ax, pick.r.x0 + 6), pick.r.x1 - 6);
       const ey = pick.side === 't' ? pick.r.y1 + 3 : pick.r.y0 - 3;
@@ -895,7 +913,7 @@ async function main() {
   addEventListener('resize', onResize);
   S.resize();
   poseAll(st.explode, 0);
-  const hero = frame(gun, HERO_DIR);
+  const hero = frame(gun, HERO_DIR, 1, true, ground());
   camera.position.copy(hero.p);
   controls.target.copy(hero.t);
   controls.update();
@@ -1071,7 +1089,7 @@ async function main() {
         stepT(view.env, now);
         view.phase = view.env.v > 0 ? view.phase + (dt * 2 * Math.PI) / SWAY_P : 0;
         const key = [st.explode, focus, view.phase, view.env.v, S.size.w, S.size.h, view.base ? view.base.toArray() : 0, st.t].join();
-        if (key !== autoKey || !autoCam) autoCam = frame(autoSubject(), autoDir(), 1, !view.base);
+        if (key !== autoKey || !autoCam) autoCam = frame(autoSubject(), autoDir(), 1, !view.base, autoKeep());
         autoKey = key;
         let cm = autoCam;
         if (view.follow) {
@@ -1183,7 +1201,7 @@ async function main() {
     S.renderer.shadowMap.autoUpdate = true;
     const A = 2, B = A + (0.3 * FULL_S) / 0.1, C = B + (0.25 * FULL_S) / 0.25, D = C + 0.5, E = D + 2.0, END = 12;
     const deg = THREE.MathUtils.degToRad;
-    const hero = (a) => frame([gun, ground()], swayDir(HERO_DIR, deg(a)));
+    const hero = (a) => frame(gun, swayDir(HERO_DIR, deg(a)), 1, true, ground());
     const lin = (a, b, x) => clamp01((x - a) / (b - a));
     function pose(T) {
       let t = 0;
@@ -1223,7 +1241,7 @@ async function main() {
       if (!cam) {
         if (T < C) cam = blend(hero(10), clockCam(t), ease(lin(A, A + 0.7, T)));
         else if (T < D) cam = blend(clockCam(Math.min(t, 0.999)), hero(0), ease(lin(C, D, T)));
-        else if (T < E) cam = frame([gun, ground()], HERO_DIR);
+        else if (T < E) cam = frame(gun, HERO_DIR, 1, true, ground());
         else cam = hero(6 * ease(lin(E, END, T)));
       }
       controls.target.copy(cam.t);

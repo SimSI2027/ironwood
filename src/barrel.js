@@ -57,7 +57,9 @@ export function buildBarrel() {
   }
   // front ramp
   ribGeo.push(at(rbox(1.2, 0.35, 0.5, 0.08), r0 + 0.4, 1.62, 0, 0, 0, -0.35));
-  const rib = mesh(merge(ribGeo), M.steelSatin);
+  // matte blued, no worn bevel catch: on satin steel every post's edges glinted, a row of bright dashes
+  const ribM = new THREE.MeshPhysicalMaterial({color: 0x1c222b, metalness: 1, roughness: 0.6, envMapIntensity: 0.5});
+  const rib = mesh(merge(ribGeo), ribM);
   const matte = mesh(rbox(r1 - r0 - 0.3, 0.02, 0.6, 0.008), M.rib, (r0 + r1) / 2, ribY + 0.088, 0);
   matte.material.bumpMap.repeat.set(1, 6);
   const ribG = group(0, 0, 0, rib, matte);

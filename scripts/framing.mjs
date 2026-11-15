@@ -36,8 +36,7 @@ const rows = await page.evaluate(async () => {
       off: [+((100 * ((x0 + x1) / 2 - (U.l + U.r) / 2)) / uw).toFixed(1), +((100 * ((y0 + y1) / 2 - (U.t + U.b) / 2)) / uh).toFixed(1)]};
   };
   const out = [];
-  out.push(['default', measure(I.autoSubject())]); // the gun with its floor contact patch
-  out.push(['default, gun only', measure(I.gun)]);
+  out.push(['default', measure(I.gun)]); // centred unless the contact shadow needs the room
   // sway extremes: hold the envelope at 1 and the phase at -/+ quarter turn
   for (const ph of [-Math.PI / 2, Math.PI / 2]) {
     Object.assign(I.view.env, {v: 1, from: 1, to: 1});
