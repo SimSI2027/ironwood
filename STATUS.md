@@ -1,11 +1,11 @@
-# STATUS — 2026-11-15, session 5 (cycle clipping, receiver white, phone dock, README)
-- 1 Cycle: BOLT_TRAVEL = PUMP = 7.5 cm. Fresh shell: tube (0.8) -> out at x -7.0 (tip 4 mm behind the tube mouth, base 5 mm ahead of the bolt) -> up to bore level -> bolt pushes it in. Spent shell: slides straight out the port (no yaw), tumbles only outside the wall.
-- 1 needed two geometry edits to be possible at 7.5 cm: PORT now runs to x -0.4 (was -3.0), and the barrel extension is a hood (open below and on the port side, inner radius 1.12) so shells can pass; extractor notch moved to the left. Ticks: Eject 0.44, Lift 0.52 (their labels overlap on the track).
-- 2 Receiver: the white was anisotropy on the swept crown, not light or wear. Crown and its screws now anisotropy 0 / roughness 0.45-0.6; pill-04 also lowers key and exposure. Receiver region: max luminance 0.99, 7 single pixels over 92% left (tiny trigger-group pins).
-- 3 Phones <700 px: low tier hides the floor reflection, keeps the contact shadow. Dock is 128 px at 390x844, CYCLE is play + scrubber + seconds + chevron; step, ticks and speeds open under the chevron (217 px open).
-- 4 README: hero (docs/hero.png = s4-eject.png, shot before item 1), cycle line, cycle controls. IRONWOOD_JOB.md tour line now 22 s with the cycle at 0.25x (file still untracked).
-- Screenshot: cutaway-out/s5-feed.png (gitignored) (800 px, cycle paused at Feed). Checked by pixel readback only: phone render, shell clearances (computed, not rendered frame by frame).
-- Pages https://simsi2027.github.io/ironwood/ checked after push, see the last commit message.
-- Look first 1) scrub the cycle 0.38-0.6 on your 4090: spent shell should leave the port flat, fresh shell rises in the open throat of the extension.
-- 2) the hero image predates the port/hood change, so it shows the old ejection; re-shoot it.
-- 3) Eject/Lift tick labels collide on the scrubber.
+# STATUS — 2026-11-15, session 6 (fire + pump clock)
+- Done 1: one clock t, FIRE 0-0.30 (press, hammer, strike, burn, travel, muzzle, recoil; src/fire.js) + PUMP 0.30-1 (old cycle remapped). Hammer re-cocks against the bolt, trigger resets on lock, the ejected shell is spent only if t passed Strike (0.11) since the last pump; otherwise it ejects clean. 1 s = 1/1.7 of t at 1x.
+- Done 2: x-ray by phase (trigger group + receiver 0.025-0.115, barrel 0.11-0.212, receiver in the pump); the camera follows t (trigger close-up, shot tracking, wide, port) until you orbit; the tour uses it.
+- Done 3: ejection is closed-form: slides onto the port sill, pivots mouth-out on that edge, flies 30 x 12 cm (spin and tumble linear), bounces 3 cm, rolls 4 cm, fades by c 0.92.
+- Done 4/5: Fire/Pump/Full, split scrubber (active segment 70%, labels never overlap: a colliding label is hidden, the active one wins), 4 speeds, 1/240 s step, s + frame readout; README, hero, job tour/cycle lines (job file still untracked).
+- Fixed after the 3 shots: hard-edged muzzle cone → soft sprites + light at 1/3; port camera framed into the header-dock band; camera pulls wide through the flash. Pages: see the push check in chat.
+- Changed your times: Burn tick 0.114 and Recoil 0.214 (one frame after Strike/Muzzle) so they step and label separately; the motions still start at 0.11 / 0.21.
+- Skipped: the red bloom on the fresh shell under x-ray and the bright brass-pin blooms in the trigger close-up.
+- Look first 1) docs/hero.png is shot 3, taken BEFORE the port-camera fix: the shell's top is clipped by the header. Re-shoot it.
+- 2) Press-Strike at 0.05x: hammer path and re-cock against the bolt/slide are computed, not checked frame by frame.
+- 3) Muzzle at 0.05x: the new sprite flash, light and smoke are unseen (no screenshot left); tune sizes and light 1.1e4 in src/fire.js.
