@@ -148,6 +148,10 @@ async function main() {
   ui.appendChild(lead);
   const [lLine, lDot, lHalo] = lead.children;
   const card = el('div', 'iw-card', '<div class="nm"></div><div class="as"></div>', ui);
+  // exploded view (explode >= 0.9): one label per assembly, hairline brass leaders
+  const lab = {svg: document.createElementNS('http://www.w3.org/2000/svg', 'svg'), els: [], key: ''};
+  lab.svg.setAttribute('class', 'iw-lead iw-labl');
+  ui.appendChild(lab.svg);
   const dock = el('div', 'iw-dock', null, ui);
   // CYCLE panel: FIRE / PUMP / FULL, frame step and play, speeds, readout; one scrubber split into the
   // FIRE and PUMP segments (the active one takes 70% of the track and shows its tick labels)
@@ -776,6 +780,83 @@ async function main() {
     for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', vis);
   }
 
+  // --- assembly labels at full explode: each is tried above and below the parts in its column, slid
+  // sideways in 16 px steps, and kept only where it clears every part's screen box (6 px) and every
+  // label placed before it (8 px), inside the usable area; leaders run from a point on the
+  // assembly's largest part to the label's near edge
+  function placeLabels() {
+    if (!lab.els.length) {
+      lab.els = asms.map((a, i) => el('div', 'iw-label', `<b>${String(i + 1).padStart(2, '0')}</b> ${a.label}`, ui));
+      lab.svg.innerHTML = asms.map(() => '<polyline points=""/><circle r="2"/>').join('');
+    }
+    camera.updateMatrixWorld();
+    const key = [...camera.matrixWorld.elements, st.explode, S.size.w, S.size.h].map((v) => v.toFixed(3)).join();
+    if (key === lab.key) return;
+    lab.key = key;
+    gun.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const proj = (p) => (v.copy(p).project(camera), [(v.x * 0.5 + 0.5) * S.size.w, (-v.y * 0.5 + 0.5) * S.size.h]);
+    const boxes = [];
+    const anchor = [];
+    asms.forEach((a, i) => {
+      let best = 0;
+      a.group.traverse((m) => {
+        if (!m.isMesh || m.isLineSegments || !m.visible) return;
+        const r = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity};
+        for (const p of hullOf(m)) {
+          const [x, y] = proj(p.clone().applyMatrix4(m.matrixWorld));
+          r.x0 = Math.min(r.x0, x); r.x1 = Math.max(r.x1, x); r.y0 = Math.min(r.y0, y); r.y1 = Math.max(r.y1, y);
+        }
+        boxes.push(r);
+        const area = (r.x1 - r.x0) * (r.y1 - r.y0);
+        if (area > best) {
+          best = area;
+          m.geometry.computeBoundingBox();
+          anchor[i] = proj(m.localToWorld(m.geometry.boundingBox.getCenter(new THREE.Vector3())));
+        }
+      });
+    });
+    const U = usable();
+    const hit = (r, list, pad) => list.some((b) => r.x0 < b.x1 + pad && r.x1 > b.x0 - pad && r.y0 < b.y1 + pad && r.y1 > b.y0 - pad);
+    const placed = [];
+    const order = asms.map((a, i) => i).sort((i, j) => anchor[i][0] - anchor[j][0]);
+    const kids = lab.svg.children;
+    order.forEach((i, n) => {
+      const e = lab.els[i];
+      const w = e.offsetWidth;
+      const h = e.offsetHeight;
+      const [ax, ay] = anchor[i];
+      let pick = null;
+      for (const side of n % 2 ? ['b', 't'] : ['t', 'b']) {
+        for (let k = 0; k < 24 && !pick; k++) {
+          const dx = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 16;
+          const x0 = Math.min(Math.max(ax - w / 2 + dx, U.l + 8), U.r - 8 - w);
+          // the column's parts: the label goes just past them, 18 px clear
+          const col = boxes.filter((b) => b.x1 > x0 - 6 && b.x0 < x0 + w + 6);
+          const y0 = side === 't' ? Math.min(ay, ...col.map((b) => b.y0)) - 18 - h : Math.max(ay, ...col.map((b) => b.y1)) + 18;
+          const r = {x0, x1: x0 + w, y0, y1: y0 + h};
+          if (r.y0 < U.t + 2 || r.y1 > U.b - 2 || hit(r, boxes, 6) || hit(r, placed, 8)) continue;
+          pick = {r, side};
+        }
+        if (pick) break;
+      }
+      // nowhere clear: the nearest spot above the parts, inside the usable area
+      if (!pick) {
+        const x0 = Math.min(Math.max(ax - w / 2, U.l + 8), U.r - 8 - w);
+        const y0 = Math.max(U.t + 2, Math.min(...boxes.map((b) => b.y0)) - 18 - h);
+        pick = {r: {x0, x1: x0 + w, y0, y1: y0 + h}, side: 't'};
+      }
+      placed.push(pick.r);
+      e.style.transform = `translate(${pick.r.x0.toFixed(1)}px, ${pick.r.y0.toFixed(1)}px)`;
+      const ex = Math.min(Math.max(ax, pick.r.x0 + 6), pick.r.x1 - 6);
+      const ey = pick.side === 't' ? pick.r.y1 + 3 : pick.r.y0 - 3;
+      kids[i * 2].setAttribute('points', `${ax.toFixed(1)},${ay.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`);
+      kids[i * 2 + 1].setAttribute('cx', ax.toFixed(1));
+      kids[i * 2 + 1].setAttribute('cy', ay.toFixed(1));
+    });
+    window.__LABELS = {placed, boxes: boxes.length, clear: placed.every((r, i) => !hit(r, boxes, 0) && !hit(r, placed.filter((q, j) => j !== i), 0))};
+  }
+
   // --- resize and initial camera
   // resize: the default (whole gun) view is refitted along the current view direction
   const onResize = () => {
@@ -930,7 +1011,10 @@ async function main() {
       a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr[i] < 0.004 ? 0 : xr[i]);
     });
     S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
-    S.cool.intensity = 0.25 * S.key.intensity; // the cool fill keeps 25% of the key
+    const fl = 1 + 0.3 * smr(0.8, 0.9, st.explode); // exploded view: fill lights up 30% so dark parts lift off the background
+    S.cool.intensity = 0.25 * S.key.intensity * fl; // the cool fill keeps 25% of the key
+    S.fill.intensity = 0.35 * fl;
+    S.under.intensity = 0.35 * fl;
     S.renderer.toneMappingExposure = 1.08 - 0.65 * rim[3];
 
     // camera: the tour's, the clock's, the visitor's (orbiting), or the framing rule (auto)
@@ -993,6 +1077,10 @@ async function main() {
     S.outline.edgeStrength = 4.5 * stepT(hvT, now);
     lead.classList.toggle('show', !!hovered);
     if (hovered) drawLeader();
+    const lv = tour.active ? 0 : smr(0.88, 0.96, st.explode);
+    lab.svg.style.opacity = lv;
+    lab.els.forEach((e) => (e.style.opacity = lv));
+    if (lv > 0) placeLabels();
 
     // shadows follow the parts, not the camera: re-render them only when something moved
     if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.t - lastP) > 1e-5 || Number.isNaN(lastE)) {
