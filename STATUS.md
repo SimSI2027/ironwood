@@ -1,10 +1,11 @@
-# STATUS — 2026-11-15, session 8 (washout + forend colour)
-- Done 1 (d5a88c5): steel family envMapIntensity 0.6, walnut 0.25; walnut clearcoat 0.15 / roughness 0.4; the room's 5 side panels at 60% (top light untouched).
-- three.js overrides material.envMapIntensity with scene.environmentIntensity when only scene.environment is set, so materials now hold the PMREM (setEnvironment in lib/materials.js, called from stage.js).
-- Checked side-on and at 3 orbit angles: steel stays blue-black, walnut brown, no silver wash.
-- Done 2 (244d65b): forend average colour in the default view 58.3 31.3 19.1 vs stock 58.6 31.1 19.6 (each channel within 2.5%), measured on the wood mesh only.
-- Base tone alone could not do it: with a black base the forend's reflections (ribs catch the lights) already equalled the stock's whole brightness. So the forend also has specularIntensity 0.25 (tint 0.966); grain shared. FOREND_WOOD in forend.js.
-- Pushed 92f510d; https://simsi2027.github.io/ironwood/ returns 200, byte-identical to docs/index.html.
-- Look first 1) The hero (1600x900) and the grip lens panel are still unseen by eye.
-- 2) The forend is now less glossy than the stock by design; if it looks flat, raise FOREND_WOOD.specular and lower tint together.
-- 3) The default-view measurement is one angle; IRONWOOD_JOB.md is still untracked.
+# STATUS — 2026-11-15, session 9 (performance + 4 visual fixes)
+- First frame 4.0 s -> 1.6 s (RTX 4090, 1920x1080 and 2560x1440): shaders compile in parallel per assembly as it is built, behind a brass line; forend arcs halved (-150k tris); SSAO half res.
+- Frame time: was 16.7 ms steady but 25.8 ms mean on the first x-ray and an 83 ms frame on the first shot (the flash light doubled every lit program); now 16.7 ms, worst 16.8 ms in every state; 1440p GPU 6-7 ms.
+- Render on demand: 0 frames when settled, the idle turn at 30 fps; adaptive steps (SSAO, reflection, DPR 1) after 1 s over 20 ms, never back up; header shows the GPU. Numbers in PERF.md; `?perf=1` overlay.
+- 6 guard: open U, 6.00 x 3.00 cm, ends into the housing. 7 FIRE camera: active part 0 px outside the central 60%, Travel >= 93% of the gun on screen.
+- 8 selection = 15% exposure lift, no halo; pad flush (stock butt no longer rolled, spacer = stock's last ring, outlines match to 0 cm). 9 cards 41-42 px clear of their part.
+- Checks: scripts/perf.mjs, firecam.mjs, cards.mjs (headless, print numbers). Corrections 7-11 added to IRONWOOD_JOB.md (still untracked).
+- Pushed 38b0436; https://simsi2027.github.io/ironwood/ returns 200, byte-identical to docs/index.html.
+- Look first 1) a D3D shader warning X4122 shows in the console; it predates this session (seen at 92f510d).
+- 2) Render on demand redraws only on the signature in main.js (sigOf/camOf): anything new that animates must be added there or it freezes.
+- 3) The pad's buried front bevel may show through the stock when it is dimmed to 50%; the hero and README are not re-shot.
