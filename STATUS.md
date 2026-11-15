@@ -1,11 +1,10 @@
-# STATUS — 2026-11-15, session 7 (10-item polish)
-- Done 1/2: shell pivots base-out on the sill and flies straight to +z, rising 0.8 cm (top 1.38 vs receiver 1.62 in the first 30%, measured); shells emissive 0 and no-bloom capped except the Burn glow; fired shell darker primer and soot, hull 15% duller; brass 0.35.
-- Done 3/4: stock is a loft (oval sections, straight comb, grip curve, smooth belly, 5.42 cm at the joint = receiver rear), pad and spacer follow the oval butt; trigger is a 4 mm blade and the guard a 3 mm oval loop, both blued.
-- Done 5/6: bloom 0.9 / 0.25, all parts soft-capped under 0.9 (NO_BLOOM in lib/materials.js); band blued with 2 screws; forend and stock use one walnut (M.wood).
-- Done 7/8/9: floor reflection at 12%, blurred, faded within 40 cm; one contact shadow; catcher removed. Framing measured from real vertices: 8.0% at both ends. Labels 11 px / 70%, active 13 px brass.
-- Done 10: hero 1600x900, front three-quarter, HIGH, no UI, spent shell just out of the port (scratchpad pose.js drove it).
-- Fixed after the 3 shots: the checkered panel sat on the wrist, not the grip, and read as grey glass side-on → a lens along the grip curve, matte.
-- Pushed c0b092c; Pages built it and https://simsi2027.github.io/ironwood/ returns 200, byte-identical to docs/index.html.
-- Look first 1) The hero and the panel fix are unseen (no screenshots left): check the panel on the grip and the hero composition.
-- 2) Side-on, the receiver and the walnut wash out to silver/grey from the RoomEnvironment reflection. Not touched.
-- 3) The forend still reads lighter and more orange than the stock under the same material (lighting and small radius). IRONWOOD_JOB.md is still untracked.
+# STATUS — 2026-11-15, session 8 (washout + forend colour)
+- Done 1 (d5a88c5): steel family envMapIntensity 0.6, walnut 0.25; walnut clearcoat 0.15 / roughness 0.4; the room's 5 side panels at 60% (top light untouched).
+- three.js overrides material.envMapIntensity with scene.environmentIntensity when only scene.environment is set, so materials now hold the PMREM (setEnvironment in lib/materials.js, called from stage.js).
+- Checked side-on and at 3 orbit angles: steel stays blue-black, walnut brown, no silver wash.
+- Done 2 (244d65b): forend average colour in the default view 58.3 31.3 19.1 vs stock 58.6 31.1 19.6 (each channel within 2.5%), measured on the wood mesh only.
+- Base tone alone could not do it: with a black base the forend's reflections (ribs catch the lights) already equalled the stock's whole brightness. So the forend also has specularIntensity 0.25 (tint 0.966); grain shared. FOREND_WOOD in forend.js.
+- Pushed 92f510d; https://simsi2027.github.io/ironwood/ returns 200, byte-identical to docs/index.html.
+- Look first 1) The hero (1600x900) and the grip lens panel are still unseen by eye.
+- 2) The forend is now less glossy than the stock by design; if it looks flat, raise FOREND_WOOD.specular and lower tint together.
+- 3) The default-view measurement is one angle; IRONWOOD_JOB.md is still untracked.
