@@ -1,6 +1,6 @@
 // 7. Stock: walnut buttstock with a pistol-grip curve, checkered grip panels both sides, grip cap,
 // sling swivel stud, and the long stock bolt with flat and lock washers inside.
-import {THREE, rcyl, mesh, group, screwX, latheX, rpoly, rodX, mergeVertices} from './lib/geo.js';
+import {THREE, rcyl, mesh, group, screwX, latheX, rodX, mergeVertices} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
 import {walnut, diamondNormal} from './lib/materials.js';
 
@@ -166,25 +166,32 @@ export function buildStock() {
   const tex = diamondNormal().clone(); // checkering as a normal map: 4 diamonds per tile, ~1.8 mm pitch
   tex.repeat.set(1.4, 1.4);
   tex.rotation = 0.35;
-  const pm = walnut({seed: 0, dark: 0.32});
+  const pm = walnut({seed: 0, dark: 0.36});
   pm.normalMap = tex;
   pm.normalScale.set(1.1, 1.1);
   pm.side = THREE.DoubleSide;
-  pm.roughness = 0.7;
-  const panel = rpoly(
-    [
-      [-22.3, -3.7, 0.2],
-      [-24.7, -2.1, 0.02],
-      [-25.3, -3.5, 0.2],
-      [-28.2, -2.7, 0.02],
-      [-27.2, -5.3, 0.3],
-      [-28.5, -10.7, 0.4],
-      [-26.1, -11.5, 0.4],
-      [-23.4, -8.3, 0.3],
-      [-22.0, -6.0, 0.3],
-    ],
-    0.2,
-  );
+  pm.roughness = 0.78;
+  pm.clearcoat = 0; // cut checkering is matte: with the oil's clearcoat it read as a grey glassy patch side-on
+  pm.sheen = 0.1;
+  // the panel: a pointed lens that follows the grip curve, 0.9 cm in from the belly line and up to
+  // 3.6 cm deep at its middle, from just behind the receiver to where the grip meets the belly
+  const panel = new THREE.Shape();
+  const edge = (x, off) => {
+    const s = (bellyY(x + 0.2) - bellyY(x - 0.2)) / 0.4;
+    const n = Math.hypot(s, 1);
+    return [x - (s / n) * off, bellyY(x) + off / n];
+  };
+  const NPN = 14;
+  const front = [];
+  const rear = [];
+  for (let k = 0; k <= NPN; k++) {
+    const x = -21.5 - (5.6 * k) / NPN;
+    const lens = Math.sin((Math.PI * k) / NPN) ** 0.6;
+    front.push(edge(x, 0.9 + 0.25 * (1 - lens)));
+    rear.push(edge(x, 0.9 + 0.25 * (1 - lens) + 2.7 * lens));
+  }
+  [...front, ...rear.reverse().slice(1, -1)].forEach(([x, y], i) => (i ? panel.lineTo(x, y) : panel.moveTo(x, y)));
+  panel.closePath();
   stock.add(mesh(panelGeo(panel, 1), pm), mesh(panelGeo(panel, -1), pm));
   // border line around each panel, on the same surface
   const border = new THREE.MeshStandardMaterial({color: 0x1a0d06, roughness: 0.6});
