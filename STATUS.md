@@ -1,11 +1,11 @@
-# STATUS — 2026-11-15, session 9 (performance + 4 visual fixes)
-- First frame 4.0 s -> 1.6 s (RTX 4090, 1920x1080 and 2560x1440): shaders compile in parallel per assembly as it is built, behind a brass line; forend arcs halved (-150k tris); SSAO half res.
-- Frame time: was 16.7 ms steady but 25.8 ms mean on the first x-ray and an 83 ms frame on the first shot (the flash light doubled every lit program); now 16.7 ms, worst 16.8 ms in every state; 1440p GPU 6-7 ms.
-- Render on demand: 0 frames when settled, the idle turn at 30 fps; adaptive steps (SSAO, reflection, DPR 1) after 1 s over 20 ms, never back up; header shows the GPU. Numbers in PERF.md; `?perf=1` overlay.
-- 6 guard: open U, 6.00 x 3.00 cm, ends into the housing. 7 FIRE camera: active part 0 px outside the central 60%, Travel >= 93% of the gun on screen.
-- 8 selection = 15% exposure lift, no halo; pad flush (stock butt no longer rolled, spacer = stock's last ring, outlines match to 0 cm). 9 cards 41-42 px clear of their part.
-- Checks: scripts/perf.mjs, firecam.mjs, cards.mjs (headless, print numbers). Corrections 7-11 added to IRONWOOD_JOB.md (still untracked).
-- Pushed 38b0436; https://simsi2027.github.io/ironwood/ returns 200, byte-identical to docs/index.html.
-- Look first 1) a D3D shader warning X4122 shows in the console; it predates this session (seen at 92f510d).
-- 2) Render on demand redraws only on the signature in main.js (sigOf/camOf): anything new that animates must be added there or it freezes.
-- 3) The pad's buried front bevel may show through the stock when it is dimmed to 50%; the hero and README are not re-shot.
+# STATUS - 2026-11-15, session 10 (tiers, triangles, adaptive steps)
+- Tiers: HIGH / MED / LOW (header toggle, ?q=). Start on MED unless the renderer names NVIDIA RTX/GTX, Radeon RX, Arc or Apple M (HIGH); phones LOW. The 1 s probe is gone.
+- MED = 1024 shadow map, no SSAO, reflection 512, DPR <= 1.25; composer, bloom and outline stay on.
+- Triangles per frame on MED: idle 482k -> 137k, x-ray 946k -> 260k, cycle 1.42M -> 260-430k (gun geometry 293k -> ~100k). Idle and x-ray are under 350k; the cycle peaks at 430k.
+- MEDIUM frame time, 1920x1080: 16.7 ms in the cycle, 30 fps turn at idle; with a 4x CPU throttle 18.9 ms in the cycle (adaptive dropped the reflection), 30 fps held elsewhere. GPU not throttleable here (RTX 4090).
+- Adaptive order: SSAO, reflection, shadow map 1024, DPR 1, shadows off (steps the tier already has are skipped); `?perf=1`, THROTTLE= and SETTLE= env in scripts/perf.mjs.
+- Locked/Ready: the camera eases back to the default framing in 0.8 s, dimming clears. docs/hero.png re-shot; README updated.
+- Look first 1) the cycle is still over 350k at its busiest tick; the next cuts are the trigger group (17k) and forend (14k).
+- 2) Real integrated graphics were not tested; the 4x number is CPU-throttled on a 4090.
+- 3) Shadows-off step recompiles materials (one hitch, last resort). Render on demand still needs new animation added to sigOf/camOf in main.js. D3D warning X4122 still predates this.
+- IRONWOOD_JOB.md is still untracked.

@@ -53,3 +53,33 @@ The idle and x-ray GPU ms read higher than before because the GPU clocks down at
 SSAO (now half resolution) and main stay the largest. 60 fps holds at 2560x1440 with no step dropped.
 Adaptive quality, tested with a forced 25 ms render: SSAO off after ~1 s, reflection off after ~2 s,
 DPR step skipped at DPR 1; header shows "· no SSAO · no reflection".
+
+## Session 10: MEDIUM tier, triangles, adaptive steps
+
+`node scripts/perf.mjs 1920 1080 q=med` (the query's `q=` replaces the default high). `THROTTLE=4 SETTLE=8000` adds Chrome's 4x CPU
+throttle (CDP) and waits 8 s before measuring so the adaptive steps have settled. The GPU (RTX 4090) cannot be throttled from the page,
+so "integrated graphics" is simulated by the CPU throttle only; GPU ms are the unthrottled card's.
+
+Triangles drawn per frame (MEDIUM, 1280x720; gun geometry 293k -> ~100k):
+
+| state | before | after |
+|---|---|---|
+| idle | 482k | 137k |
+| x-ray | 946k | 260k |
+| cycle (FULL playing, varies with the tick) | 1.42M | 260-430k |
+
+The 350k target is met at idle and in x-ray and at most ticks of the cycle; the cycle peaks at 430k (shell, flash and x-ray together).
+Segment counts: lathes and tubes 32 radial (10-24 on thin pins and screws), springs 8 per turn with 4 radial, extruded curves 4 per curve,
+bevels 2 segments, rounded boxes 1, screws 12-sided, stock and pad rings 48 points, forend 120 rings x 20 points (fewer rings
+smeared its ribs). The default view on HIGH was compared before and after at 1600x900: no visible faceting.
+
+MEDIUM frame time, 1920x1080 (frame ms / drawn per s / GPU ms):
+
+| state | unthrottled | 4x CPU throttle |
+|---|---|---|
+| idle (auto-turn, 30 fps cap) | 33.3 / 31 / 4.6 | 33.3 / 31 / 4.6 |
+| x-ray held | 33.3 / 31 / 4.4 | 33.3 / 31 / 9.9 |
+| cycle | 16.7 / 61 / 6.6 | 18.9 / 51 / 13.7 (adaptive: no reflection) |
+
+Every state holds 30 fps or better at 4x. Stress: at 12x CPU throttle (MEDIUM) the steps all fire in order (no SSAO and the
+no-op steps, reflection, shadow map, DPR, shadows) and the cycle still drops to 11 drawn/s: the CPU, not the GPU, is the limit there.
