@@ -41,15 +41,15 @@ export function createTour({asms, poseAll, frame, gun}) {
 
   T.start = (now) => {
     poseAll(0, 0);
-    const hero = frame(gun, new THREE.Vector3(0.42, 0.3, 1), 0.74);
+    const hero = frame(gun, new THREE.Vector3(0.42, 0.3, 1));
     const rec = frame(asms[3].group, new THREE.Vector3(0.25, 0.22, 1), 1.0);
     rec.t.x += 9;
     rec.p.x += 9;
     rec.p.sub(rec.t).multiplyScalar(1.9).add(rec.t);
     poseAll(0.7, 0);
-    const parts = asms.map((a) => frame(a.group, new THREE.Vector3(0.45, 0.36, 1), 1.12));
+    const parts = asms.map((a) => frame(a.group, new THREE.Vector3(0.45, 0.36, 1), 1.15));
     poseAll(1, 0);
-    const all = frame(gun, new THREE.Vector3(0.3, 0.32, 1), 0.92);
+    const all = frame(gun, new THREE.Vector3(0.3, 0.32, 1));
     poseAll(0, 0);
     T.cams = {hero, rec, parts, all};
     T.t0 = now;

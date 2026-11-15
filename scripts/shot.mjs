@@ -46,6 +46,11 @@ if (process.env.SHOT_HOVER != null) {
   await page.waitForTimeout(700);
   console.log('hover', JSON.stringify(p), 'card', await page.evaluate(() => document.querySelector('.iw-card').className + ' ' + document.querySelector('.iw-card .nm').textContent));
 }
+// SHOT_EVAL=<js> runs in the page after load (async ok); its result is printed, then 900 ms settle
+if (process.env.SHOT_EVAL) {
+  console.log('eval', JSON.stringify(await page.evaluate(`(async () => { ${process.env.SHOT_EVAL} })()`)));
+  await page.waitForTimeout(900);
+}
 const stats = await page.evaluate(() => ({...window.__STATS, probe: window.__PROBE}));
 console.log('stats', JSON.stringify(stats));
 console.log('errors', errs.length ? errs.slice(0, 12).join('\n') : 'none');

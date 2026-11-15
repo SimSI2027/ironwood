@@ -135,30 +135,68 @@ async function main() {
   let focus = -1;
   const alpha = asms.map(() => 1);
 
+  const HERO_DIR = new THREE.Vector3(0.42, 0.3, 1);
   const poseAll = (e, p) => asms.forEach((a) => a.pose(e, p));
-  const box = new THREE.Box3();
-  const sph = new THREE.Sphere();
-  /** Camera that frames an object from the front-right 3/4. */
-  function frame(obj, dir = new THREE.Vector3(0.38, 0.3, 1), fill = 0.82) {
+  /** World corners of every visible mesh's own box: much tighter than one box round a long gun. */
+  function pointsOf(obj) {
     gun.updateMatrixWorld(true);
-    box.setFromObject(obj);
-    box.getBoundingSphere(sph);
-    // portrait screens: the long gun fits a sphere badly side-on, so look further along its
-    // axis (it foreshortens) and fill tighter
-    const tall = camera.aspect < 0.8;
-    if (tall) {
-      dir = dir.clone();
-      dir.x += 0.6;
-      fill *= 1.05; // fill scales distance: >1 backs off
+    const pts = [];
+    obj.traverse((o) => {
+      if (!o.isMesh || !o.visible) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const b = o.geometry.boundingBox;
+      for (let k = 0; k < 8; k++) pts.push(new THREE.Vector3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z).applyMatrix4(o.matrixWorld));
+    });
+    return pts;
+  }
+  /** NDC y range of the free band between the header and the dock. */
+  function band() {
+    const h = S.size.h;
+    const top = Math.max(head.getBoundingClientRect().bottom, hint.offsetParent ? hint.getBoundingClientRect().bottom : 0) + 6;
+    const bot = dock.getBoundingClientRect().top - 6;
+    const lo = 1 - (2 * bot) / h;
+    const hi = 1 - (2 * top) / h;
+    return hi - lo > 0.5 ? [lo, hi] : [-1, 1];
+  }
+  /**
+   * Camera {t, p} looking along dir with every point of obj inside the free band, 8% of the
+   * viewport clear on each side, at any aspect. fill > 1 backs off further.
+   */
+  function frame(obj, dir = new THREE.Vector3(0.38, 0.3, 1), fill = 1, adjust = true) {
+    const pts = pointsOf(obj);
+    dir = dir.clone();
+    if (adjust && camera.aspect < 0.8) dir.x += 0.6; // portrait: look further along the axis
+    dir.normalize();
+    const f = dir.clone().negate();
+    const r = new THREE.Vector3().crossVectors(f, camera.up).normalize();
+    const u = new THREE.Vector3().crossVectors(r, f);
+    const ty = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const tx = ty * camera.aspect;
+    const m = 0.16; // 8% of the viewport on each side, in NDC units
+    const [b0, b1] = band();
+    const W = {x0: -1 + m, x1: 1 - m, y0: b0 + m, y1: b1 - m};
+    const c = new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
+    const P = pts.map((p) => {
+      p.sub(c);
+      return [p.dot(r), p.dot(u), p.dot(f)];
+    });
+    let ox = 0;
+    let oy = 0;
+    let D = Math.max(...P.map((q) => Math.hypot(q[0], q[1]))) / Math.min(tx, ty) * 1.5 + 1;
+    for (let it = 0; it < 16; it++) {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const q of P) {
+        const z = Math.max(q[2] + D, 1e-3);
+        const x = (q[0] - ox) / (z * tx);
+        const y = (q[1] - oy) / (z * ty);
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+      ox += ((x0 + x1) / 2 - (W.x0 + W.x1) / 2) * D * tx;
+      oy += ((y0 + y1) / 2 - (W.y0 + W.y1) / 2) * D * ty;
+      D *= Math.max((x1 - x0) / (W.x1 - W.x0), (y1 - y0) / (W.y1 - W.y0));
     }
-    const vf = THREE.MathUtils.degToRad(camera.fov) / 2;
-    const hf = Math.atan(Math.tan(vf) * camera.aspect);
-    const f = Math.min(vf, hf);
-    const dist = (sph.radius / Math.sin(f)) * fill;
-    const t = sph.center.clone();
-    t.y -= dist * Math.tan(vf) * (tall ? 0.06 : 0.2);
-    if (tall) t.x += sph.radius * 0.1; // the near (muzzle) end grows in perspective: re-centre
-    return {t, p: t.clone().add(dir.clone().normalize().multiplyScalar(dist))};
+    const t = c.clone().addScaledVector(r, ox).addScaledVector(u, oy);
+    return {t, p: t.clone().addScaledVector(dir, D * fill)};
   }
   function flyTo(c, dur = 1.2) {
     fly = {t0: performance.now(), dur: dur * 1000, ft: controls.target.clone(), fp: camera.position.clone(), tt: c.t, tp: c.p};
@@ -167,7 +205,7 @@ async function main() {
     focus = i;
     pillBtns.forEach((b, k) => b.classList.toggle('on', k === i));
     poseAll(st.explode, st.pump);
-    flyTo(i < 0 ? frame(gun, undefined, 0.74) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.05));
+    flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15));
   }
 
   // --- tour
@@ -283,11 +321,20 @@ async function main() {
   }
 
   // --- resize and initial camera
-  const onResize = () => S.resize();
+  // resize: the default (whole gun) view is refitted along the current view direction
+  const onResize = () => {
+    S.resize();
+    if (!window.__READY || tour.active) return;
+    if (focus >= 0) return flyTo(frame(asms[focus].group, new THREE.Vector3(0.42, 0.34, 1), 1.15), 0.3);
+    fly = null;
+    const c = frame(gun, camera.position.clone().sub(controls.target), 1, false);
+    camera.position.copy(c.p);
+    controls.target.copy(c.t);
+  };
   addEventListener('resize', onResize);
-  onResize();
+  S.resize();
   poseAll(st.explode, 0);
-  const hero = frame(gun, new THREE.Vector3(0.42, 0.3, 1), 0.74);
+  const hero = frame(gun, HERO_DIR);
   camera.position.copy(hero.p);
   controls.target.copy(hero.t);
   controls.update();
@@ -382,7 +429,7 @@ async function main() {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S};
+  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S};
 }
 
 main().catch((e) => {
