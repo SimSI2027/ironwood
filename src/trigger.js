@@ -51,22 +51,20 @@ export function buildTrigger() {
   housing.add(mesh(iw, M.alloy, 0, 0, 0.92), mesh(iw, M.alloy, 0, 0, -0.92));
   A.add(housing, 'trigger housing', {xray: true}); // x-ray from press to strike
 
-  // --- trigger guard loop
-  const guardPath = [
-    [-8.6, -5.95],
-    [-12.75, -5.85],
-    [-13.25, -7.3],
-    [-12.5, -8.95],
-    [-10.6, -9.7],
-    [-7.0, -9.62],
-    [-5.0, -8.65],
-    [-4.45, -7.0],
-    [-4.55, -5.95],
-  ];
-  const guard = mesh(sweepXY(rrectSection(0.22, 0.44, 0.13, 3), guardPath, {closed: true, samples: 90}), M.alloy);
+  // trigger and guard: one blued steel, no anisotropy (a sweep has no tangents, so it would streak
+  // white) and no worn-edge brightening (on parts this thin every face is an edge)
+  const blued = new THREE.MeshPhysicalMaterial({color: 0x252c39, metalness: 1, roughness: 0.42, clearcoat: 0.2, clearcoatRoughness: 0.2});
+
+  // --- trigger guard: an oval loop, a 3 mm band (8.8 mm wide), its top on the housing
+  const guardPath = [];
+  for (let k = 0; k < 64; k++) {
+    const a = Math.PI / 2 + (k / 64) * Math.PI * 2;
+    guardPath.push([-8.85 + 4.35 * Math.cos(a), -7.75 + 1.85 * Math.sin(a)]);
+  }
+  const guard = mesh(sweepXY(rrectSection(0.15, 0.44, 0.07, 3), guardPath, {closed: true, samples: 128}), blued);
   A.add(guard, 'trigger guard', {ex: [0, -2.6, 0], delay: 0.15});
 
-  // --- trigger: curved blade, tapering, serrated face
+  // --- trigger: curved steel blade, 4 mm thick, its side face 6.4 mm tapering to 4.8 mm
   const trigger = group(TRIG[0], TRIG[1], 0);
   const tPath = [
     [0, 0.25],
@@ -76,13 +74,13 @@ export function buildTrigger() {
     [-0.15, -3.3],
     [0.35, -3.85],
   ];
-  trigger.add(mesh(sweepXY(rrectSection(0.17, 0.3, 0.1, 3), tPath, {samples: 40, scale: (t) => [1 - 0.25 * t, 1 - 0.15 * t]}), M.steel));
-  trigger.add(mesh(rcyl(0.42, 0.42, 0.5, 24), M.steel, 0, 0, 0, Math.PI / 2, 0, 0));
+  trigger.add(mesh(sweepXY(rrectSection(0.32, 0.2, 0.06, 3), tPath, {samples: 40, scale: (t) => [1 - 0.25 * t, 1]}), blued));
+  trigger.add(mesh(rcyl(0.42, 0.42, 0.4, 24), blued, 0, 0, 0, Math.PI / 2, 0, 0));
   // serrations on the face
   for (let k = 0; k < 7; k++) {
     const y = -1.4 - k * 0.27;
     const x = -0.36 - 0.06 * Math.sin((k / 6) * Math.PI) + (k > 4 ? (k - 4) * 0.12 : 0);
-    trigger.add(mesh(rbox(0.05, 0.05, 0.5, 0.02), M.steelSatin, x + 0.19, y, 0));
+    trigger.add(mesh(rbox(0.05, 0.05, 0.36, 0.02), blued, x + 0.29, y, 0));
   }
   A.add(trigger, 'trigger', {ex: [0, -4.4, 0], rot: [0, 0, 0.25], delay: 0.3, drive: 'trig', pumpRot: [0, 0, -0.314]}); // pulled 18 deg
 
