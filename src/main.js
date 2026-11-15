@@ -24,6 +24,7 @@ const MARKS = {parsed: performance.now()}; // load milestones, ms since navigati
 const q = new URLSearchParams(location.search);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
+const ease1 = (v, to, k) => (Math.abs(to - v) < 1e-4 ? to : v + (to - v) * k); // eased, snapped when settled
 const smr = (a, b, x) => ((x = clamp01((x - a) / (b - a))), x * x * (3 - 2 * x));
 
 async function loadFonts() {
@@ -404,14 +405,17 @@ async function main() {
   let pointer = null;
   let hovered = null;
   let pinned = false; // touch: a tap pins the card until the next tap
+  let pickDirty = true; // the hover raycast reruns only after the pointer moved or a frame was drawn
+  let lastPick = null;
   const anchor = new THREE.Vector3(); // hit point in the hovered part's local space
   const setNdc = (e) => ndc.set((e.clientX / S.size.w) * 2 - 1, -(e.clientY / S.size.h) * 2 + 1);
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
     pointer = {x: e.clientX, y: e.clientY};
+    pickDirty = true;
     setNdc(e);
   });
-  canvas.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && (pointer = null));
+  canvas.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && ((pointer = null), (pickDirty = true)));
   let down = null;
   canvas.addEventListener('pointerdown', (e) => (down = {x: e.clientX, y: e.clientY, t: performance.now()}));
   canvas.addEventListener('pointerup', (e) => {
@@ -623,9 +627,17 @@ async function main() {
   let prev = performance.now();
   let lastE = NaN;
   let lastP = NaN;
+  // render on demand: a frame is drawn only when something it shows changed (scene state or camera);
+  // frames where only the idle auto-turn moves the camera are drawn at 30 fps
+  let lastSig = null;
+  let lastCam = null;
+  let turning = false;
+  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, S.tier === 'high' ? 1 : 0, hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
+  const camOf = () => [...camera.position.toArray(), ...camera.quaternion.toArray(), camera.aspect];
+  const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {
-    perf?.frameStart();
     const raw = now - prev;
+    if (turning && controls.autoRotate && raw < 30 && !still) return requestAnimationFrame(tick);
     const dt = Math.min(0.05, raw / 1000);
     prev = now;
     if (probe) {
@@ -656,7 +668,7 @@ async function main() {
       tourBtn.style.setProperty('--t', `${Math.min(100, ((now - tour.t0) / 10 / TOUR_LEN)).toFixed(1)}%`);
       if (k.done) stopTour();
     } else {
-      st.explode += (st.target - st.explode) * (still ? 1 : 1 - Math.exp(-dt * 9));
+      st.explode = ease1(st.explode, st.target, still ? 1 : 1 - Math.exp(-dt * 9));
     }
     out.value = st.explode.toFixed(2);
     range.style.setProperty('--p', `${(st.explode * 100).toFixed(1)}%`);
@@ -694,7 +706,7 @@ async function main() {
     if (lk !== seg.key) layoutTicks(ti);
     seg.key = lk;
     lastTick = ti;
-    xg += ((active ? 1 : 0) - xg) * (still ? 1 : 1 - Math.exp(-dt * 7));
+    xg = ease1(xg, active ? 1 : 0, still ? 1 : 1 - Math.exp(-dt * 7));
     const xt = xrayAt(st.t);
     asms.forEach((a, i) => (xr[i] = xg * (xt[a.key] || 0)));
     poseAll(st.explode, channelsAt(st.t, st.fired));
@@ -711,8 +723,8 @@ async function main() {
     // dimming keeps each part's material (30% brightness, half opacity); the selection gets a brass rim
     const kd = still ? 1 : 1 - Math.exp(-dt * 8);
     asms.forEach((a, i) => {
-      dim[i] += ((focus < 0 || focus === i ? 0 : 1) - dim[i]) * kd;
-      rim[i] += ((focus === i ? 1 : 0) - rim[i]) * kd;
+      dim[i] = ease1(dim[i], focus < 0 || focus === i ? 0 : 1, kd);
+      rim[i] = ease1(rim[i], focus === i ? 1 : 0, kd);
       a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr[i] < 0.004 ? 0 : xr[i]);
     });
     S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
@@ -742,7 +754,7 @@ async function main() {
 
     // hover outline + name card
     if (!pinned && !drag) {
-      const ph = tour.active ? null : pick();
+      const ph = tour.active ? null : pickDirty ? (lastPick = pick()) : lastPick;
       if (ph || !active) setHover(ph);
       else setHover(partByName(TICKS[ti].part) || null, true); // the active tick's part
     }
@@ -760,6 +772,17 @@ async function main() {
       lastE = st.explode;
       lastP = st.t;
     }
+    const sg = sigOf();
+    const cm = camOf();
+    const moved = !same(lastSig, sg, 1e-6);
+    const camMoved = !same(lastCam, cm, 1e-5);
+    const draw = moved || camMoved || still || !!probe || S.renderer.shadowMap.needsUpdate;
+    turning = !moved && camMoved && controls.autoRotate;
+    pickDirty = draw;
+    if (!draw) return requestAnimationFrame(tick);
+    lastSig = sg;
+    lastCam = cm;
+    perf?.frameStart();
     if (probe && probe.t0) {
       const t0 = performance.now();
       S.render();

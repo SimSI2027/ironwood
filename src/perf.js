@@ -13,6 +13,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
   const N = 120;
   const hist = {}; // name -> last N frames of ms
   const cpu = [];
+  const drawn = []; // timestamps of drawn frames, last second
   const top = () => stack[stack.length - 1];
   const begin = (name) => {
     if (!ext) return;
@@ -81,6 +82,8 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
     frameEnd(now) {
       if (prev) cpu.push(now - prev), cpu.length > N && cpu.shift();
       prev = now;
+      drawn.push(now);
+      while (drawn[0] < now - 1000) drawn.shift();
       if (ext) pending.push(fq), (fq = []), poll();
       P.calls = renderer.info.render.calls;
       P.tris = renderer.info.render.triangles;
@@ -91,6 +94,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
       P.frameMs = +avg(cpu).toFixed(2);
       P.frameMax = +Math.max(0, ...cpu).toFixed(1);
       P.programs = renderer.info.programs.length;
+      P.drawnPerS = drawn.length;
       P.size = `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`;
       P.tier = S.tier;
       const ms = (v) => (v == null ? '-' : v.toFixed(0)).padStart(6) + ' ms';
@@ -98,7 +102,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
         `IRONWOOD perf · ${S.tier} · ${P.size}\n` +
         [['script parsed', marks.parsed], ['textures built', marks.textures], ['shaders compiled', marks.shaders], ['first frame', marks.first]].map(([k, v]) => k.padEnd(17) + ms(v)).join('\n') + '\n\n' +
         (ext ? ['shadows', 'main', 'reflection', 'ssao', 'bloom', 'x-ray', 'outline', 'post'].map((k) => `${k.padEnd(11)}${(P.pass[k] || 0).toFixed(2).padStart(6)} ms`).join('\n') + `\n${'GPU total'.padEnd(11)}${P.gpuMs.toFixed(2).padStart(6)} ms` : 'no GPU timer query') +
-        `\nframe      ${P.frameMs.toFixed(1).padStart(6)} ms (max ${P.frameMax})\nprograms ${P.programs}\n\ndraws ${P.calls} · tris ${P.tris}\n${gpu}`;
+        `\nframe      ${P.frameMs.toFixed(1).padStart(6)} ms (max ${P.frameMax}) · ${P.drawnPerS} drawn/s\nprograms ${P.programs}\n\ndraws ${P.calls} · tris ${P.tris}\n${gpu}`;
     },
   };
 }
