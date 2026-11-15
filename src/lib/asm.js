@@ -30,7 +30,9 @@ function look(m, U) {
         `#include <emissivemap_fragment>
         totalEmissiveRadiance += vec3(0.95, 0.66, 0.26) * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.5) * uRim;`,
       )
-      .replace('#include <opaque_fragment>', 'outgoingLight *= uDim;\n#include <opaque_fragment>');
+      .replace('#include <opaque_fragment>', // dimmed parts are also capped under the bloom threshold, so dim brass cannot glow
+        'outgoingLight = min(outgoingLight * uDim, vec3(mix(64.0, 0.3, clamp((1.0 - uDim) / 0.7, 0.0, 1.0))));\n#include <opaque_fragment>',
+      );
   };
   m.customProgramCacheKey = () => key + '|look';
 }

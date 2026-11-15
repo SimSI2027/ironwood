@@ -46,11 +46,16 @@ html, body { background: var(--iw-bg); }
 .iw-tl .iw-range { display: block; width: 100%; }
 .iw-ticks { position: absolute; left: 8px; right: 8px; top: 11px; height: 0; pointer-events: none; }
 .iw-ticks span { position: absolute; left: calc(var(--x) * 100%); top: 0; transform: translateX(-50%); text-align: center; }
-.iw-ticks span:first-child { transform: translateX(-8px); text-align: left; }
-.iw-ticks span:last-child { transform: translateX(calc(-100% + 8px)); text-align: right; }
+/* the end labels hang outside the track ends, so Unlock (near the start) never collides */
+.iw-tl { padding: 0 52px 17px 50px; }
+.iw-ticks { left: 58px; right: 60px; }
+.iw-ticks span:first-child { transform: translateX(-100%); text-align: right; }
+.iw-ticks span:last-child { transform: none; text-align: left; }
+.iw-ticks span:first-child b { margin-right: 10px; }
+.iw-ticks span:last-child b { margin-left: 10px; }
 .iw-ticks i { display: block; width: 1px; height: 7px; margin: -3px auto 0; background: var(--iw-dim); }
-.iw-ticks span:first-child i { margin-left: 8px; }
-.iw-ticks span:last-child i { margin-right: 8px; margin-left: auto; }
+.iw-ticks span:first-child i { margin-left: auto; margin-right: 0; }
+.iw-ticks span:last-child i { margin-left: 0; }
 .iw-ticks b { display: block; margin-top: 5px; font-weight: 500; font-size: 12px; letter-spacing: 0.14em; color: var(--iw-dim); white-space: nowrap; }
 .iw-ticks span.on b { color: #c9a24b; font-weight: 600; }
 .iw-ticks span.on i { background: #c9a24b; height: 9px; }
@@ -114,7 +119,8 @@ html, body { background: var(--iw-bg); }
      only the active tick is labelled */
   .iw-cyc { flex-wrap: wrap; gap: 6px 10px; padding: 6px 12px 2px 14px; }
   .iw-cyc label { font-size: 14px; }
-  .iw-tl { order: 5; flex-basis: 100%; }
+  .iw-tl { order: 5; flex-basis: 100%; padding: 0 0 17px; }
+  .iw-ticks { left: 8px; right: 8px; }
   .iw-ticks span:not(.on) b { visibility: hidden; }
   .iw-sec { margin-left: auto; font-size: 13px; }
   /* a horizontal scroll strip: one row, never an orphan */

@@ -145,9 +145,9 @@ export function createShells() {
   // spent flight: kicked at 0.385 so at 0.40 it is just clear of the port, lands at 0.52
   const T0 = 0.385;
   const T1 = 0.52;
-  const p0 = new THREE.Vector3(face(T0) + S_LEN / 2, 0.2, 0.4);
+  const p0 = new THREE.Vector3(face(T0) + S_LEN / 2, 0, 0.4);
   const yLand = FLOOR_Y + 1.0; // lying on its side, gun group sits at y 0
-  const peak = 3.5;
+  const peak = 1.6; // a flat sideways kick out of the port, not a pop out of the top
   // y(u) = y0 + v u - g u^2 with a peak `peak` above y0 and y(1) = yLand
   const dy = yLand - p0.y;
   const gk = (2 * peak - dy + 2 * Math.sqrt(peak * (peak - dy))) / 1;
@@ -168,7 +168,7 @@ export function createShells() {
     } else if (c < 0.74) {
       spent.visible = true;
       const u = clamp01((c - T0) / (T1 - T0));
-      euler.set(9 * u, -1.1 * u, 3 * Math.PI * u);
+      euler.set(9 * u, -1.1 * u, 3 * Math.PI * u ** 1.6); // the tumble builds after it clears the port
       if (c < T1) {
         // sideways kick first (ease-out across), ballistic in height
         spent.position.set(p0.x + (land.x - p0.x) * u, p0.y + vk * u - gk * u * u, p0.z + (land.z - p0.z) * u * (2 - u));
