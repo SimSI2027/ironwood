@@ -36,20 +36,21 @@ const rows = await page.evaluate(async () => {
       off: [+((100 * ((x0 + x1) / 2 - (U.l + U.r) / 2)) / uw).toFixed(1), +((100 * ((y0 + y1) / 2 - (U.t + U.b) / 2)) / uh).toFixed(1)]};
   };
   const out = [];
-  out.push(['default', measure(I.gun)]);
+  out.push(['default', measure(I.autoSubject())]); // the gun with its floor contact patch
+  out.push(['default, gun only', measure(I.gun)]);
   // sway extremes: hold the envelope at 1 and the phase at -/+ quarter turn
   for (const ph of [-Math.PI / 2, Math.PI / 2]) {
     Object.assign(I.view.env, {v: 1, from: 1, to: 1});
     I.view.phase = ph;
     await wait(120);
-    out.push([`sway ${ph < 0 ? '-' : '+'}20`, measure(I.gun)]);
+    out.push([`sway ${ph < 0 ? '-' : '+'}20`, measure(I.autoSubject())]);
   }
   I.view.phase = 0;
   Object.assign(I.view.env, {v: 0, from: 0, to: 0});
   for (const e of [0.5, 1]) {
     st.target = e;
     await wait(1600);
-    out.push([`explode ${e}`, measure(I.gun)]);
+    out.push([`explode ${e}`, measure(I.autoSubject())]);
   }
   st.target = 0;
   await wait(1600);

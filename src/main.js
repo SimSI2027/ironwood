@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import fontMed from '@fontsource/barlow-condensed/files/barlow-condensed-latin-500-normal.woff2';
 import fontSemi from '@fontsource/barlow-condensed/files/barlow-condensed-latin-600-normal.woff2';
-import {createStage, FLOOR_Y} from './stage.js';
+import {createStage, FLOOR_Y, FLOOR_LOW} from './stage.js';
 import {buildBarrel} from './barrel.js';
 import {buildMagazine} from './magazine.js';
 import {buildForend} from './forend.js';
@@ -418,7 +418,10 @@ async function main() {
   const SWAY_P = 24; // s per sway cycle
   const view = {user: false, base: null, follow: null, phase: 0, env: tween(0, 1.6)};
   const swayDir = (d, a) => d.clone().applyAxisAngle(camera.up, a);
-  const autoSubject = () => (focus >= 0 ? asms[focus].group : gun);
+  // the whole gun is framed with its ground: the dark core of the floor's contact shadow (under receiver and magazine), so
+  // the contact shadow and the reflection beside it are always in the usable area under the gun
+  const ground = () => [-12, 40].flatMap((x) => [-4, 4].map((z) => new THREE.Vector3(x, S.floor.position.y, z))); // the shadow's dark core
+  const autoSubject = () => (focus >= 0 ? asms[focus].group : [gun, ground()]);
   const autoDir = () => swayDir(view.base || (focus >= 0 ? PILL_DIR : HERO_DIR), SWAY * view.env.v * Math.sin(view.phase));
   function followFrom(dur = 0.9) {
     view.follow = {from: {t: controls.target.clone(), p: camera.position.clone()}, t0: performance.now(), dur: dur * 1000};
@@ -915,6 +918,7 @@ async function main() {
     fx.pose(st.t, st.explode < 0.02);
     // recoil: the gun kicks back and its muzzle rises about a pivot at the shoulder, then settles
     recoil(st.explode < 0.02 ? recoilAt(st.t) : 0);
+    S.floor.position.y = FLOOR_Y + (FLOOR_LOW - FLOOR_Y) * smr(0.3, 0.75, st.explode); // clear of the dropped trigger group
 
     // dimming
     // dimming keeps each part's material (30% brightness, half opacity); the selection is lifted 15%

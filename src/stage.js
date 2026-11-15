@@ -17,7 +17,10 @@ import {setEnvironment} from './lib/materials.js';
 
 // The background is a CSS gradient (#15171c -> #07080a) behind a transparent canvas, so its
 // colours are exact on both tiers; the floor fades to transparent into it.
-export const FLOOR_Y = -32;
+// the floor sits 3.5 cm under the gun's lowest point (the stock's toe, y -18.5) so its contact shadow and
+// reflection read right under it in the default view; it sinks to FLOOR_LOW as the parts drop on explode
+export const FLOOR_Y = -22;
+export const FLOOR_LOW = -33;
 
 const Vignette = {
   uniforms: {tDiffuse: {value: null}, uAmount: {value: 0}, uAspect: {value: 1}},
@@ -139,7 +142,7 @@ export function createStage(canvas) {
   const floorGeo = new THREE.CircleGeometry(700, 96);
   const floorU = {
     uBase: {value: new THREE.Color(0.011, 0.012, 0.014)},
-    uPool: {value: new THREE.Color(0.03, 0.025, 0.019)},
+    uPool: {value: new THREE.Color(0.05, 0.042, 0.032)},
     uC: {value: new THREE.Vector2(13.5, 0)}, // the gun's centre over the floor
     uStrength: {value: 0.12},
     uR: {value: new THREE.Vector2(110, 420)},
@@ -167,13 +170,16 @@ export function createStage(canvas) {
             r /= 13.0;
             // the reflection fades out within 40 cm of the gun's footprint
             float gd = length(vec2(max(max(-44.0 - vW.x, vW.x - 71.0), 0.0), vW.z));
-            r *= (1.0 - smoothstep(0.0, 40.0, gd)) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0); // no clamped-edge smear
+            float rm = (1.0 - smoothstep(0.0, 40.0, gd)) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0); // no clamped-edge smear
             vec2 d = vW.xz - uC;
             float fade = 1.0 - smoothstep(uR.x, uR.y, length(d * vec2(0.75, 1.0)));
             vec2 pq = d / vec2(88.0, 36.0);
             float pool = exp(-dot(pq, pq) * 1.6);
-            float contact = 1.0 - smoothstep(0.0, 1.0, length(d / vec2(64.0, 10.0)));
-            vec3 col = (uBase + uPool * pool) * (1.0 - 0.65 * contact) + r * uStrength;
+            float contact = 1.0 - smoothstep(0.0, 1.0, length(d / vec2(66.0, 12.0)));
+            vec3 col = (uBase + uPool * pool) * (1.0 - 0.8 * contact);
+            // a 12% mirror: the reflection is blended at uStrength in display (gamma) space, as the eye reads it;
+            // added in linear light, 12% of the dark gun moved the floor by at most 4 levels
+            col = pow(mix(pow(col, vec3(0.4545)), pow(r * 1.6, vec3(0.4545)), uStrength * rm), vec3(2.2));
             gl_FragColor = vec4(col, fade);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
