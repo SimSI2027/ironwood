@@ -324,6 +324,19 @@ export function createStage(canvas) {
    * 1024, DPR already 1) are skipped.
    * Returns the step taken, or null when none is left.
    */
+  // a quality change dissolves: a copy of the frame just drawn (same task, so the drawing buffer is still
+  // valid) laid over the canvas and faded out with a cubic in-out over 0.45 s
+  const crossfade = () => {
+    if (!canvas.width) return;
+    const c = document.createElement('canvas');
+    c.width = canvas.width;
+    c.height = canvas.height;
+    c.getContext('2d').drawImage(canvas, 0, 0);
+    c.style.cssText = `position:absolute;left:${canvas.offsetLeft}px;top:${canvas.offsetTop}px;width:${canvas.clientWidth}px;height:${canvas.clientHeight}px;pointer-events:none;transition:opacity .45s cubic-bezier(.65,0,.35,1)`;
+    canvas.after(c);
+    requestAnimationFrame(() => requestAnimationFrame(() => (c.style.opacity = '0')));
+    setTimeout(() => c.remove(), 700);
+  };
   const degrade = () => {
     const steps = [
       ['ssao', () => ao.enabled, () => (ao.enabled = false)],
@@ -336,13 +349,14 @@ export function createStage(canvas) {
       if (S.cut[k]) continue;
       S.cut[k] = true;
       if (!live()) continue;
+      crossfade();
       off();
       resize();
       return k;
     }
     return null;
   };
-  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, key, cool, floor: floorR, cut: {}, tier: 'high'};
+  const S = {THREE, renderer, scene, camera, composer, outline, size, resize, project, select, setTier, degrade, crossfade, key, cool, floor: floorR, cut: {}, tier: 'high'};
   S.render = () => composer.render();
   return S;
 }

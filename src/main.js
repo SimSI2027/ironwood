@@ -24,7 +24,6 @@ const MARKS = {parsed: performance.now()}; // load milestones, ms since navigati
 const q = new URLSearchParams(location.search);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
-const ease1 = (v, to, k) => (Math.abs(to - v) < 1e-4 ? to : v + (to - v) * k); // eased, snapped when settled
 const smr = (a, b, x) => ((x = clamp01((x - a) / (b - a))), x * x * (3 - 2 * x));
 
 async function loadFonts() {
@@ -131,6 +130,8 @@ async function main() {
   qSeg.onclick = (e) => {
     const t = e.target.dataset?.t;
     if (!t) return;
+    S.render();
+    S.crossfade(); // the tier change dissolves over 0.45 s instead of popping
     S.setTier(t);
     epoch++;
     try {
@@ -239,6 +240,17 @@ async function main() {
   const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), t: Math.min(1, Math.max(0, Number(q.get('t') ?? 0))), fired: false};
   range.value = st.target;
   let focus = -1;
+  // every scripted move is a cubic in-out tween from wherever the value is now: no exponential chase, no pop
+  const tween = (v, dur) => ({v, from: v, to: v, t0: 0, dur});
+  const aim = (T, to, now, dur = T.dur) => to !== T.to && Object.assign(T, {from: T.v, to, t0: now, dur});
+  const stepT = (T, now) => (T.v = still ? T.to : T.from + (T.to - T.from) * ease(clamp01((now - T.t0) / (T.dur * 1000))));
+  const hold = (T, v) => Object.assign(T, {v, from: v, to: v});
+  const exT = tween(st.explode, 0.6);
+  let exDrag = false; // the slider under the pointer: the parts follow the hand directly
+  const dimT = asms.map(() => tween(0, 0.5));
+  const rimT = asms.map(() => tween(0, 0.5));
+  const xgT = tween(0, 0.35);
+  const hvT = tween(0, 0.22); // hover outline fade-in
   const dim = asms.map(() => 0);
   const rim = asms.map(() => 0);
   const xr = asms.map(() => 0); // per-assembly x-ray, set from the clock
@@ -494,6 +506,9 @@ async function main() {
   }
   tourBtn.onclick = () => (tour.active ? stopTour() : startTour());
 
+  range.addEventListener('pointerdown', () => (exDrag = true));
+  addEventListener('pointerup', () => (exDrag = false));
+  range.addEventListener('change', () => (exDrag = false));
   range.addEventListener('input', () => {
     st.target = Number(range.value);
     lastInput = performance.now();
@@ -819,7 +834,7 @@ async function main() {
   };
   let tag = 0;
   const STEP = {ssao: 'no SSAO', reflection: 'no reflection', shadowmap: 'shadow map 1024', dpr: 'DPR 1', shadows: 'no shadows'};
-  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, TIERS.indexOf(S.tier), Object.keys(S.cut).length, hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
+  const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, TIERS.indexOf(S.tier), Object.keys(S.cut).length, hovered ? hovered.id : -1, hvT.v, ...dim, ...rim, ...xr];
   const camOf = () => [...camera.position.toArray(), ...camera.quaternion.toArray(), camera.aspect];
   const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {
@@ -832,6 +847,7 @@ async function main() {
       st.explode = k.explode;
       st.t = k.t;
       range.value = k.explode;
+      hold(exT, k.explode);
       if (k.focus !== focus) {
         focus = k.focus;
         pillBtns.forEach((b, i) => b.classList.toggle('on', i === focus));
@@ -841,7 +857,9 @@ async function main() {
       tourBtn.style.setProperty('--t', `${Math.min(100, ((now - tour.t0) / 10 / TOUR_LEN)).toFixed(1)}%`);
       if (k.done) stopTour();
     } else {
-      st.explode = ease1(st.explode, st.target, still ? 1 : 1 - Math.exp(-dt * 9));
+      if (exDrag) hold(exT, st.target);
+      else aim(exT, st.target, now, 0.35 + 0.55 * Math.abs(st.target - exT.v));
+      st.explode = stepT(exT, now);
     }
     out.value = st.explode.toFixed(2);
     range.style.setProperty('--p', `${(st.explode * 100).toFixed(1)}%`);
@@ -882,7 +900,8 @@ async function main() {
     if (lk !== seg.key) layoutTicks(ti);
     seg.key = lk;
     lastTick = ti;
-    xg = ease1(xg, active ? 1 : 0, still ? 1 : 1 - Math.exp(-dt * 7));
+    aim(xgT, active ? 1 : 0, now);
+    xg = stepT(xgT, now);
     const xt = xrayAt(st.t);
     asms.forEach((a, i) => (xr[i] = xg * (xt[a.key] || 0)));
     poseAll(st.explode, channelsAt(st.t, st.fired));
@@ -897,10 +916,11 @@ async function main() {
 
     // dimming
     // dimming keeps each part's material (30% brightness, half opacity); the selection is lifted 15%
-    const kd = still ? 1 : 1 - Math.exp(-dt * 8);
     asms.forEach((a, i) => {
-      dim[i] = ease1(dim[i], focus < 0 || focus === i ? 0 : 1, kd);
-      rim[i] = ease1(rim[i], focus === i ? 1 : 0, kd);
+      aim(dimT[i], focus < 0 || focus === i ? 0 : 1, now);
+      aim(rimT[i], focus === i ? 1 : 0, now);
+      dim[i] = stepT(dimT[i], now);
+      rim[i] = stepT(rimT[i], now);
       a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr[i] < 0.004 ? 0 : xr[i]);
     });
     S.key.intensity = 3.0 - 1.4 * rim[3]; // receiver close-up (pill 04): lower key and exposure so no pixel passes 92%
@@ -944,8 +964,11 @@ async function main() {
       setHover(null);
     }
     canvas.style.cursor = drag ? 'grabbing' : canDrag(hovered) ? 'grab' : '';
+    // the outline and the leader fade in with the card (the leader fades out with it, from where it was)
+    aim(hvT, hovered ? 1 : 0, now);
+    S.outline.edgeStrength = 4.5 * stepT(hvT, now);
+    lead.classList.toggle('show', !!hovered);
     if (hovered) drawLeader();
-    else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 
     // shadows follow the parts, not the camera: re-render them only when something moved
     if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.t - lastP) > 1e-5 || Number.isNaN(lastE)) {
