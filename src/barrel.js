@@ -70,21 +70,21 @@ export function buildBarrel() {
 
   // --- barrel extension: hardened ring the bolt locks into, sits inside the receiver front
   const ext = [
-    [-3.2, 1.0],
-    [-3.2, 1.22],
+    [-3.2, 1.12],
+    [-3.2, 1.24],
     [-3.1, 1.3],
     [-0.1, 1.3],
-    [0, 1.22],
-    [0, 1.02],
-    [-2.6, 1.0],
-    [-3.2, 1.0],
+    [0, 1.24],
+    [0, 1.14],
+    [-2.6, 1.12],
+    [-3.2, 1.12],
   ];
   const extG = group(0, 0, 0);
-  const gap = 0.9;
-  extG.add(mesh(latheX(ext, 48, -Math.PI / 2 + gap / 2, Math.PI * 2 - gap), M.steelSatin));
+  // a hood over the top and the left side: open underneath (feed throat) and on the port side (ejection)
+  extG.add(mesh(latheX(ext, 48, Math.PI, Math.PI / 2 + 0.6), M.steelSatin));
   // locking recess shoulder and the extractor notch
   extG.add(mesh(rbox(0.6, 0.4, 0.9, 0.06), M.steelSatin, -2.1, 1.12, 0));
-  extG.add(mesh(rbox(1.2, 0.3, 0.3, 0.05), M.steelInner, -0.8, 0, 1.18));
+  extG.add(mesh(rbox(1.2, 0.3, 0.3, 0.05), M.steelInner, -0.8, 0, -1.18));
   A.add(extG, 'barrel extension', {ex: [-6, 0.8, 0], delay: 0.3});
 
   // --- barrel ring (magazine hanger): webbed loop around the barrel and the magazine tube end

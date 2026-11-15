@@ -8,7 +8,7 @@ import {MAG_Y} from './barrel.js';
 export const REC = {x0: -20.5, x1: 0, half: 1.55, wall: 0.3, top: 1.0, bottom: -5.3};
 export const PIN_F = [-4.6, -4.35];
 export const PIN_R = [-17.6, -4.35];
-export const PORT = [-11.3, -3.0, -1.35, 0.75];
+export const PORT = [-11.3, -0.4, -1.35, 0.75]; // runs nearly to the front so a 6.6 cm hull clears at 7.5 cm of travel
 
 /** Path of the top edge: flat, then the rear slope down to the stock. */
 function topPath() {

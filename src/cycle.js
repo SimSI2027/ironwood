@@ -1,8 +1,8 @@
 // PUMP CYCLE: one parameter c (0..1) drives a keyframed, choreographed animation. It is not a
 // physics or mechanism simulation: every channel below is a hand-timed curve of c.
-// 0.00 closed · 0.35 forend, action bars and bolt back · 0.40 spent shell leaves the ejection
-// port on an arc, tumbles, lands and fades · 0.55 a fresh shell rises on the elevator ·
-// 0.60-1.00 forend forward, the bolt carries the shell in, closed.
+// 0.00 closed · 0.35 forend, action bars and bolt back (7.5 cm) · 0.43-0.46 spent shell slides out
+// of the side port, then tumbles, lands and fades · 0.40-0.47 fresh shell backs out of the tube ·
+// 0.47-0.55 it rises on the elevator to bore level · 0.60-1.00 forend forward, the bolt carries it in.
 import * as THREE from 'three';
 import {latheX} from './lib/geo.js';
 import {MAG_Y} from './barrel.js';
@@ -41,15 +41,15 @@ export function channels(c) {
     f: s,
     b: clamp01((s - LOCK_S) / (1 - LOCK_S)),
     lock: clamp01(s / LOCK_S),
-    elev: sm((c - 0.5) / 0.08) * (1 - sm((c - 0.62) / 0.1)),
+    elev: sm((c - 0.47) / 0.08) * (1 - sm((c - 0.62) / 0.1)),
   };
 }
 
 export const TICKS = [
   {c: 0, name: 'Closed', part: 'bolt'},
   {c: +cAtStroke(LOCK_S, false).toFixed(3), name: 'Unlock', part: 'locking block'},
-  {c: 0.4, name: 'Eject', part: 'ejector'},
-  {c: 0.55, name: 'Lift', part: 'elevator'},
+  {c: 0.44, name: 'Eject', part: 'ejector'},
+  {c: 0.52, name: 'Lift', part: 'elevator'},
   {c: 0.8, name: 'Feed', part: 'shell'},
   {c: 1, name: 'Locked', part: 'action bar lock'},
 ];
@@ -142,24 +142,32 @@ export function createShells() {
       m.opacity = a;
       m.depthWrite = !t;
     });
-  // spent flight: kicked at 0.385 so at 0.40 it is just clear of the port, lands at 0.52
-  const T0 = 0.385;
-  const T1 = 0.52;
-  const p0 = new THREE.Vector3(face(T0) + S_LEN / 2, 0, 0.4);
+  // spent shell: the bolt carries it back (7.5 cm), then it slides sideways out of the port with no
+  // yaw (the port is 10.9 cm long, the hull 6.6), dropping 3 mm to the port's mid-height, and only
+  // tumbles once it is outside the wall at z 1.55. Lands at T1.
+  const T0 = 0.425;
+  const T1 = 0.55;
+  const yPort = -0.3; // port spans y -1.35..0.75
   const yLand = FLOOR_Y + 1.0; // lying on its side, gun group sits at y 0
-  const peak = 1.6; // a flat sideways kick out of the port, not a pop out of the top
-  // y(u) = y0 + v u - g u^2 with a peak `peak` above y0 and y(1) = yLand
-  const dy = yLand - p0.y;
-  const gk = (2 * peak - dy + 2 * Math.sqrt(peak * (peak - dy))) / 1;
+  const peak = 1.6; // height of the flat kick above the port line
+  const dy = yLand - yPort;
+  const gk = 2 * peak - dy + 2 * Math.sqrt(peak * (peak - dy));
   const vk = dy + gk;
-  const land = new THREE.Vector3(p0.x - 7, yLand, p0.z + 21);
+  const xLand = face(T0) + S_LEN / 2 - 7;
+  const zLand = 21;
   const euler = new THREE.Euler(0, 0, 0, 'YZX');
+
+  // fresh shell waypoints (base x, centre y), all clear of the tube mouth (x -0.6, top y -1.65),
+  // the barrel extension (x -3.2..0, hood only above y 0) and the bolt face (x -7.5 at full stroke):
+  // 1 in the tube (0.8, MAG_Y) -> 2 out of the tube (-7.0: tip at -1.0, 4 mm behind the mouth, base
+  // 5 mm ahead of the bolt) -> 3 up level with the bore, same x (tip rises into the open throat)
+  // -> 4 forward, pushed by the bolt face into the chamber.
+  const X_OUT = -7.0;
 
   /** visible: false hides both (closed and idle, or exploded). */
   function pose(c, visible = true) {
     group.visible = visible;
     if (!visible) return;
-    // --- spent shell: extracted with the bolt, kicked out of the port, tumbles, lands, fades
     if (c < T0) {
       spent.visible = true;
       spent.position.set(face(c) + S_LEN / 2, 0, 0);
@@ -168,31 +176,32 @@ export function createShells() {
     } else if (c < 0.74) {
       spent.visible = true;
       const u = clamp01((c - T0) / (T1 - T0));
-      euler.set(9 * u, -1.1 * u, 3 * Math.PI * u ** 1.6); // the tumble builds after it clears the port
+      const a = clamp01((u - 0.1) / 0.9); // ballistic phase starts once clear of the wall
+      const w = sm((u - 0.12) / 0.88); // tumble builds after it is through the port
+      euler.set(9 * w, -1.1 * w, 3 * Math.PI * w ** 1.6);
       if (c < T1) {
-        // sideways kick first (ease-out across), ballistic in height
-        spent.position.set(p0.x + (land.x - p0.x) * u, p0.y + vk * u - gk * u * u, p0.z + (land.z - p0.z) * u * (2 - u));
+        const y = u < 0.1 ? yPort * sm(u / 0.05) : yPort + vk * a - gk * a * a;
+        const x0 = face(c) + S_LEN / 2;
+        spent.position.set(x0 + (xLand - x0) * u * u, y, zLand * u * (2 - u));
       } else {
         // a small bounce and roll, then rest
         const v = (c - T1) / 0.22;
         const b = Math.max(0, Math.sin(Math.min(1, v / 0.25) * Math.PI)) * 1.1 * (1 - v);
-        spent.position.set(land.x - 1.2 * sm(v * 2), yLand + b, land.z + 2.4 * sm(v * 2));
+        spent.position.set(xLand - 1.2 * sm(v * 2), yLand + b, zLand + 2.4 * sm(v * 2));
         euler.x = 9 + 2.6 * sm(v * 2); // roll about its own axis only, it lies flat
       }
       spent.rotation.copy(euler);
-      setOpacity(spent, 1 - sm((c - 0.6) / 0.12));
+      setOpacity(spent, 1 - sm((c - 0.62) / 0.12));
     } else spent.visible = false;
 
-    // --- fresh shell: out of the magazine onto the elevator, lifted to the bore, fed by the bolt
+    // --- fresh shell: out of the tube, onto the elevator, up to the bore, fed by the bolt
     fresh.visible = c >= 0.38;
     if (!fresh.visible) return;
-    const rear = -9.4; // where the elevator holds it, just ahead of the bolt face at full stroke
-    let x = 0.8 - (0.8 - rear) * sm((c - 0.4) / 0.1); // base slides back out of the tube
-    const lift = sm((c - 0.5) / 0.08);
-    const y = MAG_Y + 0.12 + (0 - MAG_Y - 0.12) * lift;
-    x = Math.max(x, face(c)); // the bolt face pushes it home
+    const lift = sm((c - 0.47) / 0.08);
+    const y = MAG_Y * (1 - lift);
+    const x = Math.max(0.8 + (X_OUT - 0.8) * sm((c - 0.4) / 0.07), face(c)); // the bolt face pushes it home
     fresh.position.set(x + F_LEN / 2, y, 0);
-    fresh.rotation.set(0, 0, -0.12 * Math.sin(Math.PI * lift));
+    fresh.rotation.set(0, 0, 0);
     setOpacity(fresh, 1);
   }
   return {group, spent, fresh, pose};

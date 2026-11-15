@@ -8,7 +8,7 @@ export const FOREND_X0 = 14.0;
 export const FOREND_L = 22.5;
 export const BAR_Z = 1.175;
 export const PUMP = -7.5; // cm of travel for a full stroke (forend, action bars, slide)
-export const BOLT_TRAVEL = -10; // cm the bolt runs back (cycle.js: clears room for a shell)
+export const BOLT_TRAVEL = PUMP; // the bolt runs exactly the slide length
 
 /** Ribbed C-section shell: open at the top so it hugs the barrel. */
 function ribbedShell(L, Ri, Ro, open, ribs) {
