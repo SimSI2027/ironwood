@@ -46,7 +46,7 @@ async function main() {
   const asms = [buildBarrel(), buildMagazine(), buildForend(), buildReceiver(), buildBolt(), buildTrigger(), buildStock(), buildPad()];
   const gun = new THREE.Group();
   gun.position.set(-12, 0, 0);
-  asms.forEach((a) => gun.add(a.group));
+  asms.forEach((a) => (gun.add(a.group), a.finalize()));
   scene.add(gun);
   const meshes = [];
   gun.traverse((o) => o.isMesh && meshes.push(o));
@@ -133,7 +133,9 @@ async function main() {
   const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), pump: 0};
   range.value = st.target;
   let focus = -1;
-  const alpha = asms.map(() => 1);
+  const dim = asms.map(() => 0);
+  const rim = asms.map(() => 0);
+  let xr = 0; // receiver x-ray (pump cycle)
 
   const HERO_DIR = new THREE.Vector3(0.42, 0.3, 1);
   const poseAll = (e, p) => asms.forEach((a) => a.pose(e, p));
@@ -270,7 +272,7 @@ async function main() {
       const root = h.object.userData.partRoot;
       if (!root) continue;
       const ai = asms.findIndex((a) => a.key === root.userData.asm);
-      if (alpha[ai] < 0.6) continue;
+      if (dim[ai] > 0.4) continue;
       anchor.copy(root.worldToLocal(h.point.clone()));
       return root;
     }
@@ -384,10 +386,12 @@ async function main() {
     poseAll(st.explode, st.pump);
 
     // dimming
+    // dimming keeps each part's material (30% brightness, half opacity); the selection gets a brass rim
+    const kd = still ? 1 : 1 - Math.exp(-dt * 8);
     asms.forEach((a, i) => {
-      const want = focus < 0 || focus === i ? 1 : 0.25;
-      alpha[i] += (want - alpha[i]) * (still ? 1 : 1 - Math.exp(-dt * 8));
-      a.setOpacity(Math.abs(alpha[i] - 1) < 0.004 ? 1 : alpha[i]);
+      dim[i] += ((focus < 0 || focus === i ? 0 : 1) - dim[i]) * kd;
+      rim[i] += ((focus === i ? 1 : 0) - rim[i]) * kd;
+      a.setLook(dim[i] < 0.004 ? 0 : dim[i], rim[i] < 0.004 ? 0 : rim[i], xr < 0.004 ? 0 : xr);
     });
 
     // camera flight
@@ -403,7 +407,7 @@ async function main() {
 
     // hover outline + name card
     if (!pinned) setHover(tour.active ? null : pick());
-    else if (hovered && alpha[asms.findIndex((a) => a.key === hovered.userData.asm)] < 0.6) {
+    else if (hovered && dim[asms.findIndex((a) => a.key === hovered.userData.asm)] > 0.4) {
       pinned = false;
       setHover(null);
     }
