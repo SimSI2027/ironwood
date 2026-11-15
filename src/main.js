@@ -737,7 +737,7 @@ async function main() {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S};
+  window.IRONWOOD = {asms, gun, st, focusOn, pointsOf, shells, startTour, TOUR_LEN, floor: FLOOR_Y, camera, S, controls, frame}; // controls + frame: for the hero and check shots
 }
 
 main().catch((e) => {
