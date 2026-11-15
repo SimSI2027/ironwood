@@ -2,6 +2,7 @@
 // the slide plate under it; the forked elevator that lifts each shell up to the chamber.
 import {THREE, rcyl, mesh, group, rbox, latheX, rodX, rpoly, hole, extrudeXY, extrudeXZ, spring, pinZ, merge, at} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
+import {machiningTexture} from './lib/materials.js';
 import {PUMP} from './forend.js';
 import {PIN_F} from './receiver.js';
 
@@ -11,8 +12,15 @@ export function buildBolt() {
   const ride = {pump: PUMP};
 
   // --- bolt block
+  // fine machining lines: surface-ground flats on the block, turned rings on the head
+  const mach = M.steelBright.clone();
+  mach.onBeforeCompile = M.steelBright.onBeforeCompile;
+  mach.customProgramCacheKey = M.steelBright.customProgramCacheKey;
+  mach.bumpMap = machiningTexture().clone();
+  mach.bumpMap.repeat.set(1, 0.22);
+  mach.bumpScale = 0.8;
   const body = group(0, 0, 0);
-  body.add(mesh(rbox(7.4, 1.9, 2.1, 0.3, 3), M.steelBright, -4.5, 0, 0));
+  body.add(mesh(rbox(7.4, 1.9, 2.1, 0.3, 3), mach, -4.5, 0, 0));
   // bolt head: turned nose with recessed face and firing-pin hole
   body.add(
     mesh(
@@ -30,7 +38,7 @@ export function buildBolt() {
         ],
         48,
       ),
-      M.steelBright,
+      mach,
     ),
   );
   // guide rails riding in the slide, and lightening flutes on each side

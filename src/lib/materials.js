@@ -99,6 +99,67 @@ export function checkerTexture() {
   return checkerTex;
 }
 
+const normalTex = new Map();
+/**
+ * Tangent-space normal map of a diamond relief (pyramids between two sets of diagonal V grooves),
+ * computed from the height field. Used for grip checkering and the magazine cap knurl.
+ */
+export function diamondNormal(size = 128, cells = 4, strength = 2.2) {
+  const k = `${size}/${cells}/${strength}`;
+  if (normalTex.has(k)) return normalTex.get(k);
+  const h = (x, y) => {
+    const u = (x / size) * cells;
+    const v = (y / size) * cells;
+    const d1 = Math.abs((((u + v) % 1) + 1) % 1 - 0.5) * 2;
+    const d2 = Math.abs((((u - v) % 1) + 1) % 1 - 0.5) * 2;
+    return Math.pow(1 - Math.max(d1, d2), 0.8); // 1 at pyramid tip, 0 in the grooves
+  };
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const img = g.createImageData(size, size);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const dx = (h(x + 1, y) - h(x - 1, y)) * strength;
+      const dy = (h(x, y + 1) - h(x, y - 1)) * strength;
+      const l = Math.hypot(dx, dy, 1);
+      const i = (y * size + x) * 4;
+      img.data[i] = Math.round((-dx / l * 0.5 + 0.5) * 255);
+      img.data[i + 1] = Math.round((dy / l * 0.5 + 0.5) * 255); // canvas y runs down, uv v runs up
+      img.data[i + 2] = Math.round((1 / l * 0.5 + 0.5) * 255);
+      img.data[i + 3] = 255;
+    }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.NoColorSpace;
+  t.anisotropy = 8;
+  normalTex.set(k, t);
+  return t;
+}
+
+let machTex = null;
+/** Fine machining lines: uneven parallel grinding marks along u (vary along v). */
+export function machiningTexture() {
+  if (machTex) return machTex;
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 256;
+  const g = c.getContext('2d');
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let y = 0; y < 256; y++) {
+    const v = 0.5 + 0.35 * Math.sin(y * 1.9) * rnd() + 0.15 * (rnd() - 0.5);
+    const b = Math.round(Math.min(1, Math.max(0, v)) * 255);
+    g.fillStyle = `rgb(${b},${b},${b})`;
+    g.fillRect(0, y, 4, 1);
+  }
+  machTex = new THREE.CanvasTexture(c);
+  machTex.wrapS = machTex.wrapT = THREE.RepeatWrapping;
+  machTex.colorSpace = THREE.NoColorSpace;
+  return machTex;
+}
+
 let ribTex = null;
 /** Fine lengthwise lines (matted rib, serrations). */
 export function lineTexture() {
@@ -140,10 +201,14 @@ function worn(m, {wear = 1, bare = 0x8d949c, mottle = 0.22} = {}) {
           float curv = length(fwidth(gN)) / max(length(fwidth(vViewPosition)), 1e-4);
           float n1 = wNoise(vMetal * 5.0);
           float edge = smoothstep(3.5, 11.0, curv) * smoothstep(0.25, 0.65, n1 + 0.15) * uWear;
+          // 0.4 mm bevel catch: every tight convex edge (bevel radius ~0.04 cm, curvature ~25/cm)
+          // gets a thin bright polished line, independent of the wear noise
+          float bevel = smoothstep(9.0, 22.0, curv) * 0.55;
+          edge = max(edge, bevel);
           float mot = wFbm(vMetal * vec3(0.35, 2.2, 2.2));
           roughnessFactor = clamp(roughnessFactor * (1.0 + uMottle * (mot - 0.5) * 2.0), 0.08, 1.0);
           diffuseColor.rgb = mix(diffuseColor.rgb, uBare, edge);
-          roughnessFactor = mix(roughnessFactor, 0.22, edge);
+          roughnessFactor = mix(roughnessFactor, 0.2, edge);
         }`,
       );
   };

@@ -2,7 +2,7 @@
 // sling swivel stud, and the long stock bolt with flat and lock washers inside.
 import {THREE, rcyl, mesh, group, extrudeXY, smooth, screwX, latheX, rpoly, rodX} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
-import {walnut, checkerTexture} from './lib/materials.js';
+import {walnut, diamondNormal} from './lib/materials.js';
 
 export const HEEL = [-41.65, -4.45];
 export const TOE = [-42.75, -18.45];
@@ -46,10 +46,12 @@ export function buildStock() {
   const stock = group(0, 0, 0, wood);
 
   // --- checkered grip panels: pointed fleur outline, diamond checkering as bump
-  const tex = checkerTexture();
-  tex.repeat.set(2.8, 2.8);
+  const tex = diamondNormal().clone(); // checkering as a normal map: 4 diamonds per tile, ~1.8 mm pitch
+  tex.repeat.set(1.4, 1.4);
   tex.rotation = 0.35;
-  const pm = walnut({seed: 0, dark: 0.32, bump: tex, bumpScale: 2.5});
+  const pm = walnut({seed: 0, dark: 0.32});
+  pm.normalMap = tex;
+  pm.normalScale.set(1.1, 1.1);
   pm.side = THREE.DoubleSide;
   pm.roughness = 0.7;
   const panel = rpoly(

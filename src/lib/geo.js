@@ -23,7 +23,7 @@ export function group(x = 0, y = 0, z = 0, ...kids) {
 
 /** Rounded box (never a razor edge). */
 export function rbox(w, h, d, r = 0.06, seg = 2) {
-  r = Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3);
+  r = Math.min(Math.max(r, 0.04), w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3); // never under 0.4 mm
   return new RoundedBoxGeometry(w, h, d, seg, r);
 }
 
@@ -104,7 +104,7 @@ export function slot(x0, x1, y, r) {
 
 /** Extrude an XY shape to total thickness `depth` along Z, centred on z=0, with a real bevel. */
 export function extrudeXY(shape, depth, bevel = 0.05, curveSegments = 20, extra = {}) {
-  const b = Math.min(bevel, depth * 0.45);
+  const b = Math.min(Math.max(bevel, 0.04), depth * 0.45); // 0.4 mm bevel minimum
   const g = new THREE.ExtrudeGeometry(shape, {
     depth: Math.max(depth - 2 * b, 1e-3),
     bevelEnabled: b > 0,
@@ -172,7 +172,7 @@ function roundBevels(g) {
 }
 
 /** Cylinder along Y like CylinderGeometry, but with small chamfered rims (no razor edges). */
-export function rcyl(rTop, rBot, h, seg = 24, ch = Math.min(0.03, rTop * 0.2, rBot * 0.2, h * 0.2)) {
+export function rcyl(rTop, rBot, h, seg = 24, ch = Math.min(0.04, rTop * 0.25, rBot * 0.25, h * 0.25)) {
   const g = new THREE.LatheGeometry(
     [[0, -h / 2], [rBot - ch, -h / 2], [rBot, -h / 2 + ch], [rTop, h / 2 - ch], [rTop - ch, h / 2], [0, h / 2]].map(([r, y]) => new V2(Math.max(r, 1e-4), y)),
     seg,

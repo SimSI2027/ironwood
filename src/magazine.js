@@ -2,6 +2,7 @@
 // spring retainer, knurled end cap with sling swivel.
 import {THREE, rbox, mesh, group, latheX, tubeX, threadPts, spring, knurlX, merge, at} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
+import {diamondNormal} from './lib/materials.js';
 import {MAG_Y} from './barrel.js';
 
 export function buildMagazine() {
@@ -77,7 +78,14 @@ export function buildMagazine() {
 
   // --- magazine cap: knurled skirt, domed nose, swivel stud and loop
   const capG = group(0, MAG_Y, 0);
-  capG.add(mesh(knurlX(46.05, 48.4, 1.34, 60, 0.05, 0.08), M.steelSatin));
+  // diamond knurl on the skirt: smooth lathe + normal map (72 diamonds round, 5 along the band)
+  const knurl = M.steelSatin.clone();
+  knurl.onBeforeCompile = M.steelSatin.onBeforeCompile;
+  knurl.customProgramCacheKey = M.steelSatin.customProgramCacheKey;
+  knurl.normalMap = diamondNormal().clone();
+  knurl.normalMap.repeat.set(18, 15); // the band is the middle third of the lathe's v
+  knurl.normalScale.set(1.3, 1.3);
+  capG.add(mesh(latheX([[46.1, 1.28], [46.16, 1.34], [48.3, 1.34], [48.36, 1.29]], 96), knurl));
   capG.add(mesh(latheX([[48.35, 1.3], [48.6, 1.3], [49.0, 1.18], [49.3, 0.95], [49.45, 0.6], [49.5, 0]], 48), M.steel));
   capG.add(mesh(latheX([[45.95, 1.12], [45.95, 1.26], [46.1, 1.3], [46.1, 1.12]], 48), M.steelInner));
   capG.add(mesh(latheX([[49.45, 0.32], [49.85, 0.3], [50.0, 0.25], [50.0, 0]], 20), M.steelSatin));

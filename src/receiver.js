@@ -1,7 +1,7 @@
 // 4. Receiver: rounded steel box. Two side walls with real cuts (ejection port on the right,
 // 2 pin holes each side), a swept top with rounded shoulders and a matted flat, front and rear
 // walls, ejector, left and right shell latches.
-import {THREE, rcyl, mesh, group, rpoly, hole, circ, extrudeXY, extrudeYZ, sweepXY, rrectSection, rbox, merge, at} from './lib/geo.js';
+import {THREE, rcyl, mesh, group, latheX, rpoly, hole, circ, extrudeXY, extrudeYZ, sweepXY, rrectSection, rbox, merge, at} from './lib/geo.js';
 import {Asm} from './lib/asm.js';
 import {MAG_Y} from './barrel.js';
 
@@ -88,6 +88,18 @@ export function buildReceiver() {
   const lip = rpoly([[PORT[0] - 0.08, PORT[2] - 0.08], [PORT[1] + 0.08, PORT[2] - 0.08], [PORT[1] + 0.08, PORT[3] + 0.08], [PORT[0] - 0.08, PORT[3] + 0.08]], 0.5);
   lip.holes.push(hole([[PORT[0], PORT[2]], [PORT[1], PORT[2]], [PORT[1], PORT[3]], [PORT[0], PORT[3]]], 0.42));
   body.add(mesh(extrudeXY(lip, 0.03, 0.01, 24), M.steelSatin, 0, 0, half + 0.006));
+  // slotted screw heads, two each side, domed, slot at a random turn
+  const head = latheX([[0, 0.3], [0.07, 0.3], [0.11, 0.25], [0.135, 0.14], [0.14, 0]], 28);
+  const slotG = rbox(0.1, 0.62, 0.08, 0.02);
+  const scr = [[-1.6, -2.0, 0.4], [-19.2, -2.3, 1.1]];
+  for (const s of [1, -1])
+    for (const [x, y, a] of scr) {
+      const g = group(x, y, s * (half - 0.005));
+      g.rotation.y = -s * Math.PI / 2; // lathe +X -> outward
+      g.add(mesh(head, M.steelBright));
+      g.add(mesh(slotG, M.steelInner, 0.12, 0, 0, a + s, 0, 0));
+      body.add(g);
+    }
   A.add(body, 'receiver');
 
   // --- ejector: spring-steel blade riveted inside the left wall

@@ -159,7 +159,11 @@ export function buildTrigger() {
   pin(HAMMER, 2.1, 0.13, 'hammer pin', [0, 0, 5.2], 0.7);
   pin(TRIG, 2.1, 0.13, 'trigger pin', [0, 0, 5.6], 0.75);
   pin(SEAR, 2.1, 0.12, 'sear pin', [0, 0, 6.0], 0.8);
-  pin(PIN_F, 3.25, 0.2, 'trigger plate pin, front', [0, 1.2, 6.6], 0.85);
-  pin(PIN_R, 3.25, 0.2, 'trigger plate pin, rear', [0, 1.2, 6.6], 0.9);
+  const dome = new THREE.SphereGeometry(0.25, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.32, 1);
+  for (const [p, n] of [[PIN_F, 'front'], [PIN_R, 'rear']]) {
+    const m = pin(p, 3.25, 0.2, `trigger plate pin, ${n}`, [0, 1.2, 6.6], n === 'front' ? 0.85 : 0.9);
+    // domed pin ends standing proud of the receiver walls
+    for (const s of [1, -1]) m.add(mesh(dome, M.brass, 0, 0, s * 1.6, s * Math.PI / 2, 0, 0));
+  }
   return A;
 }
