@@ -36,13 +36,13 @@ html, body { background: var(--iw-bg); }
 .iw-range::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: var(--iw-bg); border: 2px solid var(--iw-brass); }
 .iw-btn { font: inherit; font-size: 17px; letter-spacing: 0.16em; color: var(--iw-fg); background: transparent; border: 1px solid var(--iw-line);
   border-radius: 999px; padding: 6px 18px; cursor: pointer; transition: border-color .2s, color .2s, background .2s; white-space: nowrap; font-variant-caps: all-small-caps; }
-.iw-btn:hover { border-color: var(--iw-brass-dim); }
-.iw-btn.on { color: var(--iw-bg); background: var(--iw-brass); border-color: var(--iw-brass); }
+.iw-btn:hover { border-color: #c9a24b; }
+.iw-btn.on, .iw-pills .iw-btn.on { color: #111; background: #c9a24b; border-color: #c9a24b; font-weight: 600; }
 .iw-tour { border-color: var(--iw-brass-dim); color: var(--iw-brass); }
 .iw-pills { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .iw-pills .iw-btn { background: var(--iw-panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .iw-pills .iw-btn i { font-style: normal; color: var(--iw-mute); margin-right: 6px; font-size: 14px; }
-.iw-pills .iw-btn.on i { color: rgba(21, 22, 26, 0.6); }
+.iw-pills .iw-btn.on i { color: rgba(17, 17, 17, 0.62); }
 
 .iw-lead { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .iw-lead polyline { fill: none; stroke: var(--iw-brass); stroke-width: 0.75; stroke-linejoin: round; }
@@ -91,7 +91,7 @@ html, body { background: var(--iw-bg); }
   .iw-range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -11px; }
   .iw-range::-moz-range-thumb { width: 20px; height: 20px; }
   .iw-btn:hover { border-color: var(--iw-line); }
-  .iw-btn.on:hover { border-color: var(--iw-brass); }
+  .iw-btn.on:hover { border-color: #c9a24b; }
 }
 .iw-tour.on { background: linear-gradient(90deg, var(--iw-brass) var(--t, 0%), rgba(210, 169, 87, 0.55) var(--t, 0%)); }
 /* low tier has no post: the vignette is drawn here instead */
