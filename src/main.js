@@ -157,7 +157,7 @@ async function main() {
   });
 
   // --- state
-  const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), pump: 0, c: Math.min(1, Math.max(0, Number(q.get('c') ?? 0)))};
+  const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), c: Math.min(1, Math.max(0, Number(q.get('c') ?? 0)))};
   range.value = st.target;
   let focus = -1;
   const dim = asms.map(() => 0);
@@ -233,7 +233,7 @@ async function main() {
   function focusOn(i) {
     focus = i;
     pillBtns.forEach((b, k) => b.classList.toggle('on', k === i));
-    poseAll(st.explode, st.pump);
+    poseAll(st.explode, channels(st.c));
     flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15));
   }
 
@@ -497,7 +497,7 @@ async function main() {
     if (tour.active) {
       const k = tour.at((now - tour.t0) / 1000);
       st.explode = k.explode;
-      st.pump = k.pump;
+      st.c = k.c;
       range.value = k.explode;
       if (k.focus !== focus) {
         focus = k.focus;
@@ -509,7 +509,6 @@ async function main() {
       if (k.done) stopTour();
     } else {
       st.explode += (st.target - st.explode) * (still ? 1 : 1 - Math.exp(-dt * 9));
-      st.pump += (0 - st.pump) * (1 - Math.exp(-dt * 8));
     }
     out.value = st.explode.toFixed(2);
     range.style.setProperty('--p', `${(st.explode * 100).toFixed(1)}%`);
@@ -536,8 +535,7 @@ async function main() {
     if (ti !== lastTick) tickEls.forEach((e, i) => e.classList.toggle('on', i === ti));
     lastTick = ti;
     xr += ((active ? 1 : 0) - xr) * (still ? 1 : 1 - Math.exp(-dt * 7));
-    const kc = tour.active ? st.pump : channels(st.c);
-    poseAll(st.explode, kc);
+    poseAll(st.explode, channels(st.c));
     shells.pose(st.c, st.c > 0 && st.explode < 0.02);
 
     // dimming
@@ -575,10 +573,10 @@ async function main() {
     else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 
     // shadows follow the parts, not the camera: re-render them only when something moved
-    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.pump + st.c - lastP) > 1e-5 || Number.isNaN(lastE)) {
+    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.c - lastP) > 1e-5 || Number.isNaN(lastE)) {
       S.renderer.shadowMap.needsUpdate = true;
       lastE = st.explode;
-      lastP = st.pump + st.c;
+      lastP = st.c;
     }
     if (probe && probe.t0) {
       const t0 = performance.now();
