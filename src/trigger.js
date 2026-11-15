@@ -5,7 +5,7 @@ import {THREE, rcyl, mesh, group, rpoly, circ, hole, extrudeXY, sweepXY, rrectSe
 import {Asm} from './lib/asm.js';
 import {PIN_F, PIN_R} from './receiver.js';
 
-const HAMMER = [-12.6, -4.4];
+export const HAMMER = [-12.6, -4.4];
 const TRIG = [-8.6, -4.7];
 const SEAR = [-10.6, -4.25];
 const SAFETY = [-13.35, -5.62];
@@ -84,7 +84,7 @@ export function buildTrigger() {
     const x = -0.36 - 0.06 * Math.sin((k / 6) * Math.PI) + (k > 4 ? (k - 4) * 0.12 : 0);
     trigger.add(mesh(rbox(0.05, 0.05, 0.5, 0.02), M.steelSatin, x + 0.19, y, 0));
   }
-  A.add(trigger, 'trigger', {ex: [0, -4.4, 0], rot: [0, 0, 0.25], delay: 0.3});
+  A.add(trigger, 'trigger', {ex: [0, -4.4, 0], rot: [0, 0, 0.25], delay: 0.3, drive: 'trig', pumpRot: [0, 0, -0.314]}); // pulled 18 deg
 
   // --- hammer: pivot boss, arm, striking face, cocking notch; lies back when cocked
   const hS = rpoly(
@@ -106,9 +106,9 @@ export function buildTrigger() {
   );
   hS.holes.push(circ(0, 0, 0.135));
   const hammer = group(HAMMER[0], HAMMER[1], 0, mesh(extrudeXY(hS, 0.5, 0.07, 20), M.steelSatin));
-  hammer.add(mesh(rbox(0.25, 0.7, 0.4, 0.06), M.steelBright, 5.35, 0.12, 0));
+  hammer.add(mesh(rbox(0.36, 0.7, 0.4, 0.06), M.steelBright, 5.44, 0.12, 0)); // striking face, tip at r 5.62 (the firing pin's rear)
   hammer.rotation.z = Math.PI * 0.93;
-  A.add(hammer, 'hammer', {ex: [-2.0, 4.6, 0], rot: [0, 0, -0.9], delay: 0.2});
+  A.add(hammer, 'hammer', {ex: [-2.0, 4.6, 0], rot: [0, 0, -0.9], delay: 0.2, drive: 'ham', pumpRot: [0, 0, -(Math.PI * 0.93 - 0.878)]}); // cocked -> on the pin
 
   // --- hammer spring on its plunger
   const hsp = group(0, -4.98, 0);

@@ -67,7 +67,7 @@ export function buildBolt() {
   // --- firing pin, its return spring and retaining pin
   const fp = group(0, 0, 0);
   fp.add(mesh(latheX([[-9.1, 0], [-9.1, 0.16], [-9.0, 0.19], [-7.6, 0.19], [-7.5, 0.24], [-7.0, 0.24], [-6.9, 0.14], [-0.4, 0.12], [-0.15, 0.06], [-0.05, 0]], 20), M.steelBright));
-  A.add(fp, 'firing pin', {...ride, ex: [-7.5, 0, 0], delay: 0.1});
+  A.add(fp, 'firing pin', {...ride, nudge: [0.2, 'pin'], ex: [-7.5, 0, 0], delay: 0.1}); // 2 mm on the strike
   const fps = mesh(spring(2.4, 0.2, 0.03, 14, {seg: 14, radial: 5}), M.brass, -6.85, 0, 0);
   A.add(fps, 'firing pin spring', {...ride, ex: [-6.0, -0.9, 0], scaleX: 1.35, delay: 0.15});
   const rp = mesh(rcyl(0.1, 0.1, 1.7, 14), M.brass, -7.85, 0.12, 0);

@@ -13,7 +13,8 @@ import {buildTrigger} from './trigger.js';
 import {buildStock} from './stock.js';
 import {buildPad} from './pad.js';
 import {createTour, TOUR_LEN} from './tour.js';
-import {channels, createShells, strokeAt, cAtStroke, TICKS, tickAt, CYCLE_S} from './cycle.js';
+import {channelsAt, createShells, strokeAt, cAtStroke, TICKS, tickAt, FULL_S, FIRE_END, pumpC, tOfC} from './cycle.js';
+import {createFireFX, recoilAt, RECOIL} from './fire.js';
 import {MAG_Y} from './barrel.js';
 import {PUMP} from './forend.js';
 
@@ -53,9 +54,11 @@ async function main() {
   scene.add(gun);
   const meshes = [];
   gun.traverse((o) => o.isMesh && meshes.push(o));
-  // pump-cycle shells: posed from st.c, not hoverable (added after the hover list)
+  // pump-cycle shells: posed from the clock st.t, not hoverable (added after the hover list)
   const shells = createShells();
   gun.add(shells.group);
+  const fx = createFireFX();
+  gun.add(fx.group);
 
   // --- UI
   const ui = el('div', 'iw', null, app);
@@ -117,7 +120,7 @@ async function main() {
     `<label>Cycle</label><div class="iw-cb"><button class="iw-ib" data-a="prev" aria-label="Step back">${ico.prev}</button>` +
       `<button class="iw-ib iw-play" data-a="play" aria-label="Play">${ico.play}</button><button class="iw-ib" data-a="next" aria-label="Step forward">${ico.next}</button></div>` +
       `<div class="iw-tl"><input class="iw-range" type="range" min="0" max="1" step="0.001" value="0" aria-label="Cycle position"><div class="iw-ticks">` +
-      TICKS.map((t) => `<span style="--x:${t.c}"><i></i><b>${t.name}</b></span>`).join('') +
+      TICKS.map((k) => `<span style="--x:${k.t}"><i></i><b>${k.name}</b></span>`).join('') +
       `</div></div><div class="iw-spd"><button data-s="1">1x</button><button data-s="0.25" class="on">0.25x</button><button data-s="0.1">0.1x</button></div>` +
       `<output class="iw-sec">0.00 s</output>` +
       `<button class="iw-ib iw-more" aria-label="More cycle controls" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M3 6l5 5 5-5"/></svg></button>`,
@@ -160,7 +163,7 @@ async function main() {
   });
 
   // --- state
-  const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), c: Math.min(1, Math.max(0, Number(q.get('c') ?? 0)))};
+  const st = {explode: Number(q.get('explode') ?? 0), target: Number(q.get('explode') ?? 0), t: Math.min(1, Math.max(0, Number(q.get('t') ?? 0))), fired: false};
   range.value = st.target;
   let focus = -1;
   const dim = asms.map(() => 0);
@@ -236,7 +239,7 @@ async function main() {
   function focusOn(i) {
     focus = i;
     pillBtns.forEach((b, k) => b.classList.toggle('on', k === i));
-    poseAll(st.explode, channels(st.c));
+    poseAll(st.explode, channelsAt(st.t, st.fired));
     flyTo(i < 0 ? frame(gun, HERO_DIR) : frame(asms[i].group, new THREE.Vector3(0.42, 0.34, 1), 1.15));
   }
 
@@ -322,12 +325,12 @@ async function main() {
     true,
   );
   function dragStroke(ds) {
-    let c = st.c;
+    let c = pumpC(st.t);
     if (c >= 1 - 1e-4 && ds > 0) c = 0; // a finished cycle: pulling again starts the next one
     const s = Math.min(1, Math.max(0, strokeAt(c) + ds));
     if (c < 0.5) c = s >= 1 - 1e-4 ? 0.5 : cAtStroke(s, false);
     else c = s >= 1 ? 0.5 : cAtStroke(s, true);
-    st.c = c;
+    st.t = tOfC(c);
   }
   const axA = new THREE.Vector3();
   const axB = new THREE.Vector3();
@@ -348,7 +351,7 @@ async function main() {
     if (!drag || e.pointerId !== drag.id) return;
     drag = null;
     controls.enabled = true;
-    if (st.c >= 0.999 || st.c <= 0.001) st.c = 0; // back to closed: x-ray off
+    if (st.t >= 0.999 || st.t <= FIRE_END + 0.001) st.t = 0; // back to closed: x-ray off
   };
   addEventListener('pointerup', endDrag);
   addEventListener('pointercancel', endDrag);
@@ -363,9 +366,9 @@ async function main() {
     engage();
     cyc.playing = false;
     cyc.tw = null;
-    st.c = Number(cRange.value);
+    st.t = Number(cRange.value);
   });
-  const stepTo = (to, from = st.c) => (cyc.tw = {from, to, t0: performance.now(), dur: 450});
+  const stepTo = (to, from = st.t) => (cyc.tw = {from, to, t0: performance.now(), dur: 450});
   cycEl.querySelector('.iw-cb').onclick = (e) => {
     const a = e.target.closest('button')?.dataset.a;
     if (!a) return;
@@ -373,16 +376,16 @@ async function main() {
     if (a === 'play') {
       cyc.tw = null;
       cyc.playing = !cyc.playing;
-      if (cyc.playing && st.c >= 0.999) st.c = 0;
+      if (cyc.playing && st.t >= 0.999) st.t = 0;
       return;
     }
     cyc.playing = false;
     if (a === 'next') {
-      const n = TICKS.find((t) => t.c > st.c + 1e-3);
-      n ? stepTo(n.c) : stepTo(TICKS[1].c, 0); // from Locked, round to the next cycle
+      const n = TICKS.find((k) => k.t > st.t + 1e-3);
+      n ? stepTo(n.t) : stepTo(TICKS[1].t, 0); // from Locked, round to the next cycle
     } else {
-      const pv = [...TICKS].reverse().find((t) => t.c < st.c - 1e-3);
-      pv ? stepTo(pv.c) : stepTo(TICKS[TICKS.length - 2].c, 1);
+      const pv = [...TICKS].reverse().find((k) => k.t < st.t - 1e-3);
+      pv ? stepTo(pv.t) : stepTo(TICKS[TICKS.length - 2].t, 1);
     }
   };
   cycEl.querySelector('.iw-spd').onclick = (e) => {
@@ -391,7 +394,8 @@ async function main() {
     cyc.speed = Number(b.dataset.s);
     [...b.parentNode.children].forEach((k) => k.classList.toggle('on', k === b));
   };
-  const partByName = (n) => (n === 'shell' ? shells.fresh : asms.flatMap((a) => a.parts).find((p) => p.name === n)?.obj);
+  const partByName = (n) =>
+    n === 'shell' ? shells.fresh : n === 'chambered' || n === 'ejected' ? shells.chambered() : n === 'shot column' ? fx.shot : asms.flatMap((a) => a.parts).find((p) => p.name === n)?.obj;
   let lastTick = -1;
   const asmLabel = Object.fromEntries(asms.map((a, i) => [a.key, `${String(i + 1).padStart(2, '0')} · ${a.label}`]));
   function pick(force = false) {
@@ -500,7 +504,7 @@ async function main() {
     if (tour.active) {
       const k = tour.at((now - tour.t0) / 1000);
       st.explode = k.explode;
-      st.c = k.c;
+      st.t = k.t;
       range.value = k.explode;
       if (k.focus !== focus) {
         focus = k.focus;
@@ -518,28 +522,37 @@ async function main() {
     if (!tour.active) {
       if (cyc.tw) {
         const t = clamp01((now - cyc.tw.t0) / cyc.tw.dur);
-        st.c = cyc.tw.from + (cyc.tw.to - cyc.tw.from) * ease(t);
+        st.t = cyc.tw.from + (cyc.tw.to - cyc.tw.from) * ease(t);
         if (t >= 1) cyc.tw = null;
       } else if (cyc.playing) {
-        st.c += (dt * cyc.speed) / CYCLE_S;
-        if (st.c >= 1) {
-          st.c = 0;
+        st.t += (dt * cyc.speed) / FULL_S;
+        if (st.t >= 1) {
+          st.t = 0;
           cyc.playing = false;
         }
       }
     }
     // cycle panel readout; x-ray the receiver while the cycle is off closed
-    cRange.value = st.c;
-    cRange.style.setProperty('--p', `${(st.c * 100).toFixed(1)}%`);
-    cOut.value = `${(st.c * CYCLE_S).toFixed(2)} / ${CYCLE_S.toFixed(2)} s`;
+    // fired: the last pass through FIRE got past the strike (a pump then ejects a spent shell)
+    if (st.t < FIRE_END) st.fired = st.t >= 0.11;
+    cRange.value = st.t;
+    cRange.style.setProperty('--p', `${(st.t * 100).toFixed(1)}%`);
+    cOut.value = `${(st.t * FULL_S).toFixed(2)} / ${FULL_S.toFixed(2)} s`;
     cPlay.classList.toggle('on', cyc.playing);
-    const active = st.c > 0.0005 && st.explode < 0.05;
-    const ti = tickAt(st.c);
+    const active = st.t > 0.0005 && st.explode < 0.05;
+    const ti = tickAt(st.t);
     if (ti !== lastTick) tickEls.forEach((e, i) => e.classList.toggle('on', i === ti));
     lastTick = ti;
     xr += ((active ? 1 : 0) - xr) * (still ? 1 : 1 - Math.exp(-dt * 7));
-    poseAll(st.explode, channels(st.c));
-    shells.pose(st.c, st.c > 0 && st.explode < 0.02);
+    poseAll(st.explode, channelsAt(st.t, st.fired));
+    shells.pose(st.t, st.fired, st.t > 0 && st.explode < 0.02);
+    fx.pose(st.t, st.explode < 0.02);
+    // recoil: the gun kicks back and its muzzle rises about a pivot at the shoulder, then settles
+    const rk = st.explode < 0.02 ? recoilAt(st.t) : 0;
+    const th = RECOIL.rise * rk;
+    const pv = RECOIL.pivot;
+    gun.rotation.z = th;
+    gun.position.set(-12 - RECOIL.kick * rk + pv.x - (pv.x * Math.cos(th) - pv.y * Math.sin(th)), pv.y - (pv.x * Math.sin(th) + pv.y * Math.cos(th)), 0);
 
     // dimming
     // dimming keeps each part's material (30% brightness, half opacity); the selection gets a brass rim
@@ -578,10 +591,10 @@ async function main() {
     else for (const c of [lLine, lDot, lHalo]) c.setAttribute('visibility', 'hidden');
 
     // shadows follow the parts, not the camera: re-render them only when something moved
-    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.c - lastP) > 1e-5 || Number.isNaN(lastE)) {
+    if (Math.abs(st.explode - lastE) > 1e-5 || Math.abs(st.t - lastP) > 1e-5 || Number.isNaN(lastE)) {
       S.renderer.shadowMap.needsUpdate = true;
       lastE = st.explode;
-      lastP = st.c;
+      lastP = st.t;
     }
     if (probe && probe.t0) {
       const t0 = performance.now();

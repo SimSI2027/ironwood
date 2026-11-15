@@ -61,12 +61,13 @@ export class Asm {
   /**
    * Register a part. ex: fan-out offset [x, y, z] in assembly space. rot: fan-out rotation [rx, ry, rz].
    * delay: stagger 0..1 inside the part phase. pump: dx cm per unit of the cycle channel `drive`
-   * (f forend stroke, b bolt stroke, lock, elev); pumpRot: [rx, ry, rz] per unit; drop: [dy, channel].
+   * (f forend stroke, b bolt stroke, lock, elev); pumpRot: [rx, ry, rz] per unit; drop: [dy, channel]; nudge: [dx, channel].
    * scaleX: stretch along X at full fan-out (springs).
    */
-  add(obj, name, {ex = [0, 0, 0], rot = null, delay = 0, pump = 0, pumpRot = null, drive = 'f', drop = null, scaleX = 1, parent = null, xray = false} = {}) {
+  add(obj, name, {ex = [0, 0, 0], rot = null, delay = 0, pump = 0, pumpRot = null, drive = 'f', drop = null, nudge = null, scaleX = 1, parent = null, xray = false} = {}) {
     obj.userData.part = name;
     obj.userData.asm = this.key;
+    obj.userData.xray = xray;
     (parent || this.group).add(obj);
     this.parts.push({
       obj,
@@ -81,6 +82,7 @@ export class Asm {
       pump,
       drive,
       drop,
+      nudge,
       scaleX,
       xray,
     });
@@ -115,6 +117,7 @@ export class Asm {
       const p = k[part.drive] || 0;
       part.obj.position.x += part.pump * p;
       if (part.drop) part.obj.position.y += part.drop[0] * (k[part.drop[1]] || 0);
+      if (part.nudge) part.obj.position.x += part.nudge[0] * (k[part.nudge[1]] || 0);
       part.obj.quaternion.copy(part.restQ);
       if (part.rot) {
         q.identity().slerp(part.rot, b);

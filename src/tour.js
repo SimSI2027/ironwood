@@ -1,13 +1,13 @@
-// TOUR: a 22.2 s scripted run as a pure function of time.
-// 0-2 hero · 2-7.2 one pump cycle at 0.25x (2.2-7.0, 4.8 s) · 7.2-15.2 each assembly in turn ·
-// 15.2-20.2 full explode on a turntable · 20.2-22.2 reassemble.
-import {CYCLE_S} from './cycle.js';
+// TOUR: a 24.2 s scripted run as a pure function of time.
+// 0-2 hero · 2-9.2 the FULL clock (fire, then pump) at 0.25x (2.2-9.0, 6.8 s) · 9.2-17.2 each
+// assembly in turn · 17.2-22.2 full explode on a turntable · 22.2-24.2 reassemble.
+import {FULL_S} from './cycle.js';
 import * as THREE from 'three';
 
-const D = 2.2; // the cycle beat is 2.2 s longer than the old two pumps
+const D = 4.2; // the clock beat is 4.2 s longer than the old two pumps
 export const TOUR_LEN = 20 + D;
 const C0 = 2.2;
-const C1 = C0 + CYCLE_S / 0.25;
+const C1 = C0 + FULL_S / 0.25;
 const DRIFT = 0.08;
 const sm = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -59,14 +59,14 @@ export function createTour({asms, poseAll, frame, gun}) {
     const C = T.cams;
     const n = asms.length;
     let explode = 0;
-    let c = 0;
+    let c = 0; // the clock t
     let focus = -1;
     let cam;
     if (t < 2) {
       cam = orbit(C.hero, -0.12 * (t / 2));
     } else if (t < 5 + D) {
       cam = blend(orbit(C.hero, -0.12), C.rec, sm(2, 2.9, t));
-      c = t > C0 && t < C1 ? (t - C0) / (C1 - C0) : 0; // one cycle at 0.25x
+      c = t > C0 && t < C1 ? (t - C0) / (C1 - C0) : 0; // FULL at 0.25x
     } else if (t < 5 + D + n) {
       const u = t - D;
       explode = 0.7 * sm(5, 6, u);
@@ -85,7 +85,7 @@ export function createTour({asms, poseAll, frame, gun}) {
       explode = 1 - sm(18, 19.6, u);
       cam = blend(orbit(C.all, -Math.PI * 0.99), C.hero, sm(18, 19.9, u));
     }
-    return {explode, c, focus, cam, done: t >= TOUR_LEN};
+    return {explode, t: c, focus, cam, done: t >= TOUR_LEN};
   };
   return T;
 }

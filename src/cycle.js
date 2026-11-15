@@ -1,5 +1,8 @@
-// PUMP CYCLE: one parameter c (0..1) drives a keyframed, choreographed animation. It is not a
-// physics or mechanism simulation: every channel below is a hand-timed curve of c.
+// THE CLOCK: one parameter t (0..1) in two segments, FIRE 0.00-0.30 and PUMP 0.30-1.00. Every channel
+// below is a hand-timed curve of t (keyframed, not a physics or mechanism simulation).
+// FIRE: Ready 0 · Press 0.03-0.08 (trigger back 18 deg) · Hammer 0.08-0.11 · Strike 0.11 (pin 2 mm) ·
+// Burn 0.11-0.15 · Travel 0.15-0.21 · Muzzle 0.21-0.25 · Recoil 0.21-0.30 (see fire.js).
+// PUMP runs the pump cycle on its own c = (t - 0.3) / 0.7:
 // 0.00 closed · 0.35 forend, action bars and bolt back (7.5 cm) · 0.43-0.46 spent shell slides out
 // of the side port, then tumbles, lands and fades · 0.40-0.47 fresh shell backs out of the tube ·
 // 0.47-0.55 it rises on the elevator to bore level · 0.60-1.00 forend forward, the bolt carries it in.
@@ -8,10 +11,15 @@ import {latheX} from './lib/geo.js';
 import {MAG_Y} from './barrel.js';
 import {BOLT_TRAVEL} from './forend.js';
 import {FLOOR_Y} from './stage.js';
+import {HAMMER} from './trigger.js';
 
-export const CYCLE_S = 1.2; // seconds per cycle at 1x
+export const FIRE_END = 0.3; // FIRE 0..0.3, PUMP 0.3..1
+export const FULL_S = 1.7; // seconds for the whole clock at 1x (FIRE 0.51 s, PUMP 1.19 s)
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
 const sm = (t) => ((t = clamp01(t)), t * t * (3 - 2 * t));
+/** Pump c (0..1) from the clock, and back. */
+export const pumpC = (t) => clamp01((t - FIRE_END) / (1 - FIRE_END));
+export const tOfC = (c) => FIRE_END + (1 - FIRE_END) * c;
 
 /** Forend stroke s(c): 0 forward, 1 fully back. Rises on 0-0.5 (pull), falls on 0.5-1 (push). */
 export function strokeAt(c) {
@@ -45,16 +53,60 @@ export function channels(c) {
   };
 }
 
-export const TICKS = [
-  {c: 0, name: 'Closed', part: 'bolt'},
-  {c: +cAtStroke(LOCK_S, false).toFixed(3), name: 'Unlock', part: 'locking block'},
-  {c: 0.44, name: 'Eject', part: 'ejector'},
-  {c: 0.52, name: 'Lift', part: 'elevator'},
-  {c: 0.8, name: 'Feed', part: 'shell'},
-  {c: 1, name: 'Locked', part: 'action bar lock'},
+// hammer: cocked lies back at 0.93 pi; fired, its tip (r 5.62) sits on the firing pin's rear (-9.1, 0)
+const H_COCKED = Math.PI * 0.93;
+const H_FIRED = 0.878;
+const H_R = 5.62;
+const C_LOCK = cAtStroke(LOCK_S, true); // push half: the locking block rises, the bolt locks
+function hammerAt(t, fired) {
+  if (t < FIRE_END) return t < 0.08 ? 0 : Math.min(1, ((t - 0.08) / 0.03) ** 2); // spring-driven: fastest at the pin
+  if (!fired) return 0; // never fell: stays cocked, the bolt rides over it
+  const c = pumpC(t);
+  const b = c <= 0.5 ? channels(c).b : 1; // once re-cocked the sear holds it
+  // the tip stays behind the firing pin's rear as the bolt rides back over it, then lies down cocked
+  const xp = -9.1 + BOLT_TRAVEL * b - 0.06;
+  const phiC = Math.acos(Math.max(-1, Math.min(1, (xp - HAMMER[0]) / H_R)));
+  const phiL = H_FIRED + (H_COCKED - H_FIRED) * sm(b / 0.95);
+  const phi = Math.min(H_COCKED, Math.max(phiC, phiL));
+  return (H_COCKED - phi) / (H_COCKED - H_FIRED);
+}
+/** All channels at clock t: pump {f, b, lock, elev} plus ham (0 cocked..1 on the pin), trig (0..1 = 18 deg), pin (0..1 = 2 mm). */
+export function channelsAt(t, fired) {
+  const c = pumpC(t);
+  const k = channels(c);
+  k.ham = hammerAt(t, fired);
+  if (t < FIRE_END) {
+    k.trig = sm((t - 0.03) / 0.05);
+    k.pin = sm((t - 0.11) / 0.004) * (1 - sm((t - 0.125) / 0.02)); // strikes, then its spring returns it onto the hammer
+  } else {
+    k.trig = fired ? 1 - sm((c - C_LOCK) / 0.04) : 0; // resets when the bolt locks
+    k.pin = 0;
+  }
+  return k;
+}
+
+// ticks on the clock t: `part` is the moving part that gets the outline and name card
+export const FIRE_TICKS = [
+  {t: 0, name: 'Ready', part: 'trigger'},
+  {t: 0.03, name: 'Press', part: 'trigger'},
+  {t: 0.08, name: 'Hammer', part: 'hammer'},
+  {t: 0.11, name: 'Strike', part: 'firing pin'},
+  {t: 0.114, name: 'Burn', part: 'chambered'},
+  {t: 0.15, name: 'Travel', part: 'shot column'},
+  {t: 0.21, name: 'Muzzle', part: 'choke tube'},
+  {t: 0.214, name: 'Recoil', part: 'recoil pad'},
 ];
+export const PUMP_TICKS = [
+  {t: FIRE_END, name: 'Closed', part: 'bolt'},
+  {t: +tOfC(cAtStroke(LOCK_S, false)).toFixed(3), name: 'Unlock', part: 'locking block'},
+  {t: +tOfC(0.43).toFixed(3), name: 'Eject', part: 'ejected'},
+  {t: +tOfC(0.5).toFixed(3), name: 'Lift', part: 'elevator'},
+  {t: +tOfC(0.8).toFixed(3), name: 'Feed', part: 'shell'},
+  {t: 1, name: 'Locked', part: 'action bar lock'},
+];
+export const TICKS = [...FIRE_TICKS, ...PUMP_TICKS];
 /** Index of the active tick: the last one reached. */
-export const tickAt = (c) => TICKS.reduce((k, t, i) => (c >= t.c - 1e-4 ? i : k), 0);
+export const tickAt = (t) => TICKS.reduce((k, x, i) => (t >= x.t - 1e-4 ? i : k), 0);
 
 // --- the two shells (12 gauge look): brass head, red hull. Built along +X, centred on the origin.
 const F_LEN = 6.0; // fresh: star crimp closed
@@ -105,17 +157,42 @@ const mats = () => ({
   brass: new THREE.MeshPhysicalMaterial({color: 0xc29a48, metalness: 1, roughness: 0.3, transparent: false}),
   primer: new THREE.MeshPhysicalMaterial({color: 0x9aa0a8, metalness: 1, roughness: 0.35}),
 });
-function shell(len, hull, hullMat, name) {
+/** Hull glow: emissive that fills the hull from the base (geometry x 1.2) forward to uX, strength uA. */
+function glowHull(m) {
+  const U = {uX: {value: 0}, uA: {value: 0}};
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vGX;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGX = position.x;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vGX;\nuniform float uX;\nuniform float uA;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(3.4, 1.15, 0.22) * uA * smoothstep(uX + 0.5, uX - 0.5, vGX);');
+  };
+  m.customProgramCacheKey = () => 'hullglow';
+  m.userData.glow = U;
+  return m;
+}
+function shell(len, hull, hullMat, name, spent = false) {
   const M = mats();
   const g = new THREE.Group();
   const inner = new THREE.Group();
   inner.position.x = -len / 2; // pivot at the shell's centre
   g.add(inner);
-  inner.add(new THREE.Mesh(headGeo(), M.brass), new THREE.Mesh(hull, hullMat));
-  const pr = new THREE.Mesh(latheX([[-0.012, 0], [-0.012, 0.22], [0.0, 0.26]], 24), M.primer);
-  inner.add(pr);
+  inner.add(new THREE.Mesh(headGeo(), M.brass), new THREE.Mesh(hull, glowHull(hullMat)));
+  // primer: a fired one is dark, with the pin's dent in its centre
+  const pp = spent ? [[0.05, 0], [0.03, 0.05], [-0.004, 0.1], [-0.012, 0.15], [-0.012, 0.22], [0.0, 0.26]] : [[-0.012, 0], [-0.012, 0.22], [0.0, 0.26]];
+  if (spent) Object.assign(M.primer, {color: new THREE.Color(0x3b3430), roughness: 0.7, metalness: 0.6});
+  inner.add(new THREE.Mesh(latheX(pp, 24), M.primer));
+  const ms = [M.brass, M.primer, hullMat];
+  if (spent) {
+    // soot inside the opened mouth
+    const soot = new THREE.MeshStandardMaterial({color: 0x120c09, roughness: 0.95, side: THREE.DoubleSide});
+    inner.add(new THREE.Mesh(latheX([[5.4, 0.8], [6.56, 0.83]], 48), soot));
+    ms.push(soot);
+  }
   g.userData.part = name;
-  g.userData.mats = [M.brass, M.primer, hullMat];
+  g.userData.mats = ms;
+  g.userData.glow = hullMat.userData.glow;
+  g.userData.len = len;
   g.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
@@ -124,13 +201,28 @@ function shell(len, hull, hullMat, name) {
   });
   return g;
 }
+/** Scorch: vertex colours darken the spent hull toward its mouth. */
+function scorch(g) {
+  const p = g.attributes.position;
+  const col = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const k = 1 - 0.8 * sm((p.getX(i) - 5.6) / 0.95);
+    col.set([k, k * 0.92, k * 0.88], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
 
-/** Spent and fresh shells, posed from c. Add `group` to the gun so it shares the gun's frame. */
+/**
+ * The chambered round (live, or spent once fired) that the pump ejects, and the fresh one from the
+ * tube, posed from the clock t. Add `group` to the gun so it shares the gun's frame.
+ */
 export function createShells() {
-  const spent = shell(S_LEN, spentHull(), new THREE.MeshPhysicalMaterial({color: 0x781616, roughness: 0.62, clearcoat: 0.1}), 'spent shell');
+  const spent = shell(S_LEN, scorch(spentHull()), new THREE.MeshPhysicalMaterial({color: 0x781616, roughness: 0.62, clearcoat: 0.1, vertexColors: true}), 'spent shell', true);
+  const live = shell(F_LEN, freshHull(), new THREE.MeshPhysicalMaterial({color: 0xa31a1a, roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3}), 'shell');
   const fresh = shell(F_LEN, freshHull(), new THREE.MeshPhysicalMaterial({color: 0xa31a1a, roughness: 0.4, clearcoat: 0.3, clearcoatRoughness: 0.3}), 'shell');
   const group = new THREE.Group();
-  group.add(spent, fresh);
+  group.add(spent, live, fresh);
   const face = (c) => BOLT_TRAVEL * channels(c).b; // bolt face x (0 when closed)
   const setOpacity = (s, a) =>
     s.userData.mats.forEach((m) => {
@@ -142,7 +234,7 @@ export function createShells() {
       m.opacity = a;
       m.depthWrite = !t;
     });
-  // spent shell: the bolt carries it back (7.5 cm), then it slides sideways out of the port with no
+  // ejected shell: the bolt carries it back (7.5 cm), then it slides sideways out of the port with no
   // yaw (the port is 10.9 cm long, the hull 6.6), dropping 3 mm to the port's mid-height, and only
   // tumbles once it is outside the wall at z 1.55. Lands at T1.
   const T0 = 0.425;
@@ -153,9 +245,33 @@ export function createShells() {
   const dy = yLand - yPort;
   const gk = 2 * peak - dy + 2 * Math.sqrt(peak * (peak - dy));
   const vk = dy + gk;
-  const xLand = face(T0) + S_LEN / 2 - 7;
   const zLand = 21;
   const euler = new THREE.Euler(0, 0, 0, 'YZX');
+  function poseEject(s, c) {
+    const L = s.userData.len;
+    const xLand = face(T0) + L / 2 - 7;
+    s.visible = true;
+    setOpacity(s, 1);
+    s.rotation.set(0, 0, 0);
+    if (c < T0) return s.position.set(face(c) + L / 2, 0, 0);
+    if (c >= 0.74) return (s.visible = false);
+    const u = clamp01((c - T0) / (T1 - T0));
+    const a = clamp01((u - 0.1) / 0.9);
+    const w = sm((u - 0.12) / 0.88);
+    euler.set(9 * w, -1.1 * w, 3 * Math.PI * w ** 1.6);
+    if (c < T1) {
+      const y = u < 0.1 ? yPort * sm(u / 0.05) : yPort + vk * a - gk * a * a;
+      const x0 = face(c) + L / 2;
+      s.position.set(x0 + (xLand - x0) * u * u, y, zLand * u * (2 - u));
+    } else {
+      const v = (c - T1) / 0.22;
+      const b = Math.max(0, Math.sin(Math.min(1, v / 0.25) * Math.PI)) * 1.1 * (1 - v);
+      s.position.set(xLand - 1.2 * sm(v * 2), yLand + b, zLand + 2.4 * sm(v * 2));
+      euler.x = 9 + 2.6 * sm(v * 2);
+    }
+    s.rotation.copy(euler);
+    setOpacity(s, 1 - sm((c - 0.62) / 0.12));
+  }
 
   // fresh shell waypoints (base x, centre y), all clear of the tube mouth (x -0.6, top y -1.65),
   // the barrel extension (x -3.2..0, hood only above y 0) and the bolt face (x -7.5 at full stroke):
@@ -163,36 +279,27 @@ export function createShells() {
   // 5 mm ahead of the bolt) -> 3 up level with the bore, same x (tip rises into the open throat)
   // -> 4 forward, pushed by the bolt face into the chamber.
   const X_OUT = -7.0;
+  let chambered = live;
 
-  /** visible: false hides both (closed and idle, or exploded). */
-  function pose(c, visible = true) {
+  /** fired: FIRE ran before this pump (the round in the chamber is spent). visible: false hides all. */
+  function pose(t, fired, visible = true) {
     group.visible = visible;
     if (!visible) return;
-    if (c < T0) {
-      spent.visible = true;
-      spent.position.set(face(c) + S_LEN / 2, 0, 0);
-      spent.rotation.set(0, 0, 0);
-      setOpacity(spent, 1);
-    } else if (c < 0.74) {
-      spent.visible = true;
-      const u = clamp01((c - T0) / (T1 - T0));
-      const a = clamp01((u - 0.1) / 0.9); // ballistic phase starts once clear of the wall
-      const w = sm((u - 0.12) / 0.88); // tumble builds after it is through the port
-      euler.set(9 * w, -1.1 * w, 3 * Math.PI * w ** 1.6);
-      if (c < T1) {
-        const y = u < 0.1 ? yPort * sm(u / 0.05) : yPort + vk * a - gk * a * a;
-        const x0 = face(c) + S_LEN / 2;
-        spent.position.set(x0 + (xLand - x0) * u * u, y, zLand * u * (2 - u));
-      } else {
-        // a small bounce and roll, then rest
-        const v = (c - T1) / 0.22;
-        const b = Math.max(0, Math.sin(Math.min(1, v / 0.25) * Math.PI)) * 1.1 * (1 - v);
-        spent.position.set(xLand - 1.2 * sm(v * 2), yLand + b, zLand + 2.4 * sm(v * 2));
-        euler.x = 9 + 2.6 * sm(v * 2); // roll about its own axis only, it lies flat
-      }
-      spent.rotation.copy(euler);
-      setOpacity(spent, 1 - sm((c - 0.62) / 0.12));
-    } else spent.visible = false;
+    const c = pumpC(t);
+    const isSpent = t < FIRE_END ? t >= 0.15 : fired; // the crimp opens as the shot column leaves
+    chambered = isSpent ? spent : live;
+    (isSpent ? live : spent).visible = false;
+    poseEject(chambered, c);
+    // burn: the hull glows from the base forward (0.11-0.15), then cools while the shot travels
+    const gl = chambered.userData.glow;
+    const L = chambered.userData.len;
+    if (t < 0.15) {
+      gl.uA.value = t >= 0.11 ? 1 : 0;
+      gl.uX.value = 1.2 + (L - 1.2 + 0.6) * clamp01((t - 0.11) / 0.04);
+    } else {
+      gl.uA.value = t < FIRE_END ? 1 - clamp01((t - 0.15) / 0.07) : 0;
+      gl.uX.value = L + 1;
+    }
 
     // --- fresh shell: out of the tube, onto the elevator, up to the bore, fed by the bolt
     fresh.visible = c >= 0.38;
@@ -204,5 +311,5 @@ export function createShells() {
     fresh.rotation.set(0, 0, 0);
     setOpacity(fresh, 1);
   }
-  return {group, spent, fresh, pose};
+  return {group, spent, live, fresh, pose, chambered: () => chambered};
 }
