@@ -132,6 +132,7 @@ async function main() {
     const t = e.target.dataset?.t;
     if (!t) return;
     S.setTier(t);
+    epoch++;
     try {
       localStorage.setItem('ironwood.tier.v2', t);
     } catch (err) {}
@@ -700,7 +701,7 @@ async function main() {
   controls.update();
   if (q.has('tour')) startTour();
 
-  const perf = q.has('perf') ? createPerf(S, {gpu, marks: MARKS, floor: S.floor, parts: [...meshes, ...asms.flatMap((a) => a.edges)]}) : null;
+  const perf = q.has('perf') ? createPerf(S, {gpu, marks: MARKS, floor: S.floor, onGpu: (id, ms) => { const f = cpuOf.get(id); if (f) cpuOf.delete(id), sample(f.at, Math.max(f.cpu, ms), f.epoch); }, parts: [...meshes, ...asms.flatMap((a) => a.edges)]}) : null;
   const still = q.has('still');
   let prev = performance.now();
   let lastE = NaN;
@@ -710,19 +711,46 @@ async function main() {
   let lastSig = null;
   let lastCam = null;
   let turning = false;
-  // adaptive quality: a mean frame time over 20 ms across 1 s of consecutive drawn frames (never the
-  // 30 fps turn; rAF alternates 17/33 ms under load, so no single frame decides) drops one step
-  // (SSAO, reflection, shadow map 1024, DPR 1, shadows off); it never steps back up in this visit
-  let drewLast = false;
-  let lastDraw = 0;
-  const slow = []; // [t, ms] of consecutive drawn frames, last second
+  // adaptive quality judges render work, not frame spacing: the cost of each drawn frame is its GPU time
+  // (one TIME_ELAPSED query round S.render(), read back a few frames later; ?perf=1 sums its own pass queries
+  // instead) or, where that is missing, the CPU time of the call; the larger of the two. Frames skipped by
+  // render on demand or the 30 fps turn are never sampled. A median over 20 ms across 1 s of drawn frames
+  // (at least 8, so one compile hitch cannot decide) drops one step (SSAO, reflection, shadow map 1024,
+  // DPR 1, shadows off); it never steps back up in this visit
+  const tq = !perf && gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  const inflight = []; // {q, cpu, at, epoch}: GPU queries not read back yet
+  const cpuOf = new Map(); // perf mode: frame tag -> {cpu, at, epoch}
+  const cost = []; // [t, ms] of drawn frames, last second
+  let epoch = 0; // samples of frames drawn before a step or a tier change are discarded
+  const sample = (at, ms, e) => {
+    if (e !== epoch || !window.__READY || still) return;
+    cost.push([at, ms]);
+    while (cost[0][0] < at - 1000) cost.shift();
+    if (cost.length < 8 || at - cost[0][0] < 900) return;
+    const med = cost.map((c) => c[1]).sort((a, b) => a - b)[cost.length >> 1];
+    if (med <= 20) return;
+    const k = S.degrade();
+    if (k) dropped.push(STEP[k]), setHint();
+    epoch++;
+    cost.length = 0;
+  };
+  const pollCost = () => {
+    while (inflight.length && (inflight.length > 6 || gl.getQueryParameter(inflight[0].q, gl.QUERY_RESULT_AVAILABLE))) {
+      const f = inflight.shift();
+      const ready = gl.getQueryParameter(f.q, gl.QUERY_RESULT_AVAILABLE);
+      const gpuMs = ready && !gl.getParameter(tq.GPU_DISJOINT_EXT) ? gl.getQueryParameter(f.q, gl.QUERY_RESULT) / 1e6 : 0;
+      gl.deleteQuery(f.q);
+      sample(f.at, Math.max(f.cpu, gpuMs), f.epoch);
+    }
+  };
+  let tag = 0;
   const STEP = {ssao: 'no SSAO', reflection: 'no reflection', shadowmap: 'shadow map 1024', dpr: 'DPR 1', shadows: 'no shadows'};
   const sigOf = () => [st.explode, st.t, gun.rotation.z, gun.position.x, gun.position.y, S.renderer.toneMappingExposure, S.key.intensity, S.size.w, S.size.h, TIERS.indexOf(S.tier), Object.keys(S.cut).length, hovered ? hovered.id : -1, ...dim, ...rim, ...xr];
   const camOf = () => [...camera.position.toArray(), ...camera.quaternion.toArray(), camera.aspect];
   const same = (a, b, eps) => !!a && a.every((v, i) => Math.abs(v - b[i]) < eps);
   const tick = (now) => {
     const raw = now - prev;
-    if (turning && controls.autoRotate && raw < 30 && !still) return (drewLast = false), requestAnimationFrame(tick);
+    if (turning && controls.autoRotate && raw < 30 && !still) return requestAnimationFrame(tick);
     const dt = Math.min(0.05, raw / 1000);
     prev = now;
     if (tour.active) {
@@ -853,22 +881,19 @@ async function main() {
     const draw = moved || camMoved || still || S.renderer.shadowMap.needsUpdate;
     turning = !moved && camMoved && controls.autoRotate;
     pickDirty = draw;
-    if (!draw) return (drewLast = false), requestAnimationFrame(tick);
+    if (!draw) return requestAnimationFrame(tick);
     lastSig = sg;
     lastCam = cm;
     perf?.frameStart();
+    const t0 = performance.now();
+    const gq = tq && gl.createQuery();
+    if (gq) gl.beginQuery(tq.TIME_ELAPSED_EXT, gq);
     S.render();
-    if (drewLast && !still && window.__READY) {
-      slow.push([now, now - lastDraw]);
-      while (slow[0][0] < now - 1000) slow.shift();
-      if (now - slow[0][0] > 900 && slow.reduce((a, f) => a + f[1], 0) / slow.length > 20) {
-        const k = S.degrade();
-        if (k) dropped.push(STEP[k]), setHint();
-        slow.length = 0;
-      }
-    } else slow.length = 0;
-    drewLast = true;
-    lastDraw = now;
+    if (gq) gl.endQuery(tq.TIME_ELAPSED_EXT);
+    const cpu = performance.now() - t0;
+    if (gq) inflight.push({q: gq, cpu, at: now, epoch}), pollCost();
+    else if (perf) cpuOf.set(++tag, {cpu, at: now, epoch}), cpuOf.size > 16 && cpuOf.delete(cpuOf.keys().next().value);
+    else sample(now, cpu, epoch);
     if (!window.__READY) {
       if (perf) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // first frame = the GPU finished it
       MARKS.shaders ??= performance.now(); // until compileAsync, the shaders compile inside the first frame
@@ -878,7 +903,7 @@ async function main() {
       window.__READY = true;
       window.__STATS = {meshes: meshes.length, parts: asms.reduce((n, a) => n + a.parts.length, 0), tris: S.renderer.info.render.triangles, tier: S.tier};
     }
-    perf?.frameEnd(now);
+    perf?.frameEnd(now, tag);
     requestAnimationFrame(tick);
   };
   /**

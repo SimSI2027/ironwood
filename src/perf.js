@@ -2,7 +2,7 @@
 // triangles and the WebGL renderer string, in a small overlay and on window.__PERF.
 // Passes are timed as segments on one stack: a nested pass ends its parent's query and the parent
 // resumes in a new one afterwards (WebGL allows one TIME_ELAPSED query at a time).
-export function createPerf(S, {gpu, marks, floor, parts}) {
+export function createPerf(S, {gpu, marks, floor, parts, onGpu}) {
   const {renderer, composer} = S;
   const gl = renderer.getContext();
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
@@ -69,6 +69,7 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
         gl.deleteQuery(q);
       }
       if (disjoint) continue;
+      onGpu?.(f.tag, Object.values(sums).reduce((a, v) => a + v, 0));
       for (const k of new Set([...Object.keys(hist), ...Object.keys(sums)])) {
         (hist[k] ||= []).push(sums[k] || 0);
         if (hist[k].length > N) hist[k].shift();
@@ -79,12 +80,12 @@ export function createPerf(S, {gpu, marks, floor, parts}) {
     frameStart() {
       renderer.info.reset();
     },
-    frameEnd(now) {
+    frameEnd(now, tag) {
       if (prev) cpu.push(now - prev), cpu.length > N && cpu.shift();
       prev = now;
       drawn.push(now);
       while (drawn[0] < now - 1000) drawn.shift();
-      if (ext) pending.push(fq), (fq = []), poll();
+      if (ext) (fq.tag = tag), pending.push(fq), (fq = []), poll();
       P.calls = renderer.info.render.calls;
       P.tris = renderer.info.render.triangles;
       if (now - shown < 500) return;
