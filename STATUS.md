@@ -1,10 +1,11 @@
-# STATUS - 2026-11-15, session 12 (final build run, v2.0)
-- Shipped: 13 items + a 5-defect fix commit; tag v2.0 pushed; https://simsi2027.github.io/ironwood/ (and hero.png, preview.gif, ironwood.mp4) return 200 with the new build.
-- AA: scene pass in its own MSAA target (8 HIGH / 4 MED), SMAA last on every tier (LOW now goes through the composer); DPR 2 / 1.5 / 1; outline full-res ~2 px. Creased normals (35 deg), 48-radial tubes, 24x12 springs, aniso 8.
-- Camera: one rule, subject = 80% of the usable area: scripts/framing.mjs, every vertex, 25 states x 3 sizes in 70-85%. Idle = +/-20 deg sway (2.8-42.8 deg azimuth), no orbit. Tweens are cubic in-out; quality steps cross-fade.
-- Grounding trade-off: the floor rose to -22 and the contact shadow must stay in view, so on short-wide screens (1902x935, 1280x720) the gun sits 15% above centre; it is centred at 1189x940 and 390x844.
-- Receiver wall: a set light-to-dark reflection sweep (not the room's), luminance 30 -> 21 rear to front on all tiers (scripts/lum.mjs); one sample at x -19 still reads ~55, cause not found.
-- Exploded view: fill +30%, 8 labels clear of parts and each other at 4 sizes; leaders: 0 crossings at the 3 check sizes, 1 left at 800x500.
-- Muzzle: soft 15 cm bloom + short puff; found and fixed SSAO blacking out sprite quads on HIGH; Recoil tick label moved to 0.235 so the Muzzle tick covers the flash.
-- Film: ?render + window.seek for capture.mjs; mp4 1920x1080 60 fps 12 s (7.6 MB), gif 640 px 15 fps (5.7 MB). Hero re-shot from film mode.
-- Risks: 8x MSAA at DPR 2 is heavy on big screens (adaptive steps cover it); full-res outline cost ~20 ms in a throttled perf run; nothing seen on integrated GPUs. IRONWOOD_JOB.md still untracked.
+# STATUS - handover, 2026-11-15, v2.1 (project closed)
+1. IRONWOOD Mk I: an interactive three.js pump-action shotgun, all geometry and textures in code. Fire, work the pump, explode 8 assemblies, hover for names, 20 s tour. Live: https://simsi2027.github.io/ironwood/
+2. Build: `sh scripts/build.sh` (needs the cutaway skill's build.mjs in ~/.claude/skills; npm install for the font) writes docs/index.html, one self-contained file; log goes to logs.txt.
+3. Where things live: src/ one file per assembly (barrel, magazine, forend, receiver, bolt, trigger, stock, pad) plus cycle.js (clock t: FIRE 0-0.30, PUMP 0.30-1), fire.js, stage.js (scene, tiers), main.js (UI, camera, labels), tour.js, perf.js, lib/.
+4. Checks: scripts/shot.mjs (screenshot + console errors), framing.mjs (80% fill rule), lum.mjs (receiver wall luminance), cards.mjs, probe.mjs, perf.mjs (see PERF.md). Film: ?render + window.seek, captured with the skill's capture.mjs into docs/ironwood.mp4 and preview.gif.
+5. Shipped: tags v1.0, v2.0 (release with the film), v2.1; Pages serves docs/ from main. ref/ (the drawing), IRONWOOD_JOB.md, cutaway-out/ and logs.txt are git-ignored.
+6. v2.1: fill-light lift and the 8 labels now fade in over explode 0.5-0.8; receiver bright spot was the rear screw head, now a dull material (34 vs 30 wall); history checked: only "ED" + a GitHub noreply address.
+7. Leftover: one leader crossing at 800x500 (0 at the three main sizes).
+8. Leftover: on short-wide screens (1902x935, 1280x720) the gun sits 15% above centre to keep the contact shadow in view.
+9. Leftover: 8x MSAA at DPR 2 is heavy on big screens (adaptive steps cover it); nothing tested on integrated GPUs; the film and gif were not re-rendered for v2.1 (the fill change shows only mid-explode).
+10. Docs: README.md (title, live link, controls, tiers, credits), PERF.md (measurements), LICENSE (MIT).
